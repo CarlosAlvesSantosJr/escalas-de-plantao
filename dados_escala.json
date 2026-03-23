@@ -7,10 +7,6 @@
                 "2026-04-06|DIA": "INDISPONIVEL",
                 "2026-04-09|DIA": "INDISPONIVEL",
                 "2026-04-12|DIA": "INDISPONIVEL",
-                "2026-04-14|DIA": "INDISPONIVEL",
-                "2026-04-16|DIA": "INDISPONIVEL",
-                "2026-04-18|DIA": "INDISPONIVEL",
-                "2026-04-21|DIA": "INDISPONIVEL",
                 "2026-04-24|DIA": "INDISPONIVEL",
                 "2026-04-26|DIA": "INDISPONIVEL"
             }
@@ -30,10 +26,6 @@
             "tipo": "MOTORISTA",
             "disponibilidade": {
                 "2026-04-01|DIA": "INDISPONIVEL",
-                "2026-04-09|NOITE": "INDISPONIVEL",
-                "2026-04-17|NOITE": "INDISPONIVEL",
-                "2026-04-25|NOITE": "INDISPONIVEL",
-                "2026-04-28|DIA": "INDISPONIVEL",
                 "2026-04-13|DIA": "INDISPONIVEL",
                 "2026-04-06|DIA": "INDISPONIVEL"
             }
@@ -54,13 +46,6 @@
             "disponibilidade": {
                 "2026-04-07|DIA": "INDISPONIVEL",
                 "2026-04-01|DIA": "INDISPONIVEL",
-                "2026-04-01|NOITE": "INDISPONIVEL",
-                "2026-04-08|DIA": "INDISPONIVEL",
-                "2026-04-08|NOITE": "INDISPONIVEL",
-                "2026-04-15|DIA": "INDISPONIVEL",
-                "2026-04-15|NOITE": "INDISPONIVEL",
-                "2026-04-22|DIA": "INDISPONIVEL",
-                "2026-04-22|NOITE": "INDISPONIVEL",
                 "2026-04-29|DIA": "INDISPONIVEL",
                 "2026-04-29|NOITE": "INDISPONIVEL"
             }
@@ -76,10 +61,6 @@
             "disponibilidade": {
                 "2026-04-04|DIA": "INDISPONIVEL",
                 "2026-04-04|NOITE": "INDISPONIVEL",
-                "2026-04-11|DIA": "INDISPONIVEL",
-                "2026-04-11|NOITE": "INDISPONIVEL",
-                "2026-04-18|DIA": "INDISPONIVEL",
-                "2026-04-18|NOITE": "INDISPONIVEL",
                 "2026-04-25|DIA": "INDISPONIVEL",
                 "2026-04-25|NOITE": "INDISPONIVEL"
             }
