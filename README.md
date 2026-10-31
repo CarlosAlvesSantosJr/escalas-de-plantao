@@ -64,9 +64,4 @@ O sistema gera um arquivo chamado dados_escala.json na mesma pasta do executáve
 
 Licença
 Este projeto está sob a licença MIT. Veja o arquivo LICENSE para detalhes.
-
-⭐ Desenvolvido por Carlos Alves Santos Jr
-
-<img width="1920" height="1080" alt="Captura de Tela (118)" src="https://github.com/user-attachments/assets/311e1752-3466-4fd1-a153-b422bc2d8940" />
-<img width="1920" height="1080" alt="Captura de Tela (120)" src="https://github.com/user-attachments/assets/c92ddde2-cef3-406b-8c87-3b61941d00c3" />
-<img width="1920" height="1080" alt="Captura de Tela (119)" src="https://github.com/user-attachments/assets/a25870e6-13f9-426d-8c7f-ecf9db02d449" />
+Desenvolvido por Carlos Alves Santos Jr
