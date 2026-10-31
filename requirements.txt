@@ -1,0 +1,4 @@
+flask>=2.3
+fpdf>=1.7,<2
+tkcalendar>=1.6
+pytest>=8

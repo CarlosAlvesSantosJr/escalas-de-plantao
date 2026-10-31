@@ -46,18 +46,74 @@ Você precisará instalar as bibliotecas externas via pip:
 
 Bash
 pip install tkcalendar fpdf
-Execute o aplicativo:
+
+Ou para o frontend web use:
 
 Bash
-python nome_do_seu_arquivo.py
+pip install -r requirements.txt
+
+Execute o aplicativo desktop:
+
+Bash
+python app.py
+
+Execute o frontend web:
+
+Bash
+python webapp.py
+
+Em seguida abra no navegador:
+
+http://localhost:5000
+
+Rodar com Docker (recomendado)
+
+Com o Docker Desktop instalado, dê dois cliques em iniciar.bat (Windows) ou rode ./iniciar.sh (macOS/Linux). Pelo terminal:
+
+Bash
+docker compose up -d --build
+
+Abra http://localhost:8080. Os dados ficam na pasta ./dados. Guia passo a passo para quem não é da área: docs/INSTALACAO.md
+
+Documentação do projeto (contexto, fluxogramas, arquitetura e resultados): docs/PORTFOLIO.md
+
+Rodar os testes:
+
+Bash
+python -m pytest
+
+Estrutura do projeto
+
+escala/dominio.py       Modelos (Funcionario, Periodo, Plantao) e enums (Cargo, Turno, Status)
+escala/algoritmo.py     Geração da escala (puro, sem UI, testável)
+escala/repositorio.py   Persistência JSON atômica (lê também o formato antigo)
+escala/relatorio_pdf.py Exportação PDF
+webapp.py               API Flask + frontend web (static/)
+app.py                  Versão desktop Tkinter, usando o mesmo núcleo
+tests/                  Testes do algoritmo e da API
+
 Regras de Negócio do Algoritmo
-O sistema segue regras rígidas de segurança hospitalar na geração automática:
+Regras rígidas (nunca violadas):
 
-Descanso Mínimo: Se um funcionário trabalhou no turno da NOITE, ele não pode ser escalado para o turno do DIA seguinte.
+Indisponível / Férias: o profissional nunca é escalado nesse turno.
 
-Carga Horária Equilibrada: O algoritmo sempre seleciona o funcionário com o menor número de plantões realizados até aquele momento, entre os que estão disponíveis.
+Um plantão por dia: ninguém trabalha DIA e NOITE no mesmo dia.
 
-Respeito às Preferências: Se alguém marcou um turno como "Preferencial", o sistema tentará colocá-lo ali antes de buscar outros candidatos.
+Descanso pós-noite: quem trabalhou à NOITE não pega o DIA seguinte.
+
+Critérios de escolha, em ordem:
+
+1. Olhar adiante: evita escalar alguém que é o único disponível num turno logo à frente (o que criaria uma vaga).
+
+2. Ninguém fica 7 dias sem plantão, exceto quem esteve bloqueado (férias/indisponível) a janela inteira.
+
+3. Carga equilibrada: menor número de plantões. O turno "Preferencial" conta como um plantão a menos, então pesa na escolha sem atropelar a equidade.
+
+4. Equilíbrio de noites e de fins de semana entre a equipe.
+
+5. Quem trabalhou há mais tempo; por fim, ordem alfabética (resultado determinístico).
+
+Vagas que não puderem ser preenchidas aparecem com o motivo (ex.: "Todos os motoristas indisponíveis").
 
 Persistência de Dados
 O sistema gera um arquivo chamado dados_escala.json na mesma pasta do executável. Isso garante que, ao fechar o programa, você não perca os funcionários cadastrados nem as configurações de disponibilidade.
