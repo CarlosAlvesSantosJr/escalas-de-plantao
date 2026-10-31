@@ -158,19 +158,4 @@ Dockerfile · docker-compose.yml · iniciar.bat · iniciar.sh · parar.bat
 **Infra:** Docker, Docker Compose
 **Qualidade:** pytest (21 testes de regras de negócio e API)
 
-## 🗺️ Próximos passos
 
-- [ ] Troca de plantão entre profissionais, com aprovação da coordenação
-- [ ] Ajuste manual de um turno direto na escala, com validação das regras
-- [ ] Login e várias bases do SAMU no mesmo sistema
-- [ ] Envio da escala por WhatsApp ou e-mail
-
-## 📄 Licença
-
-Distribuído sob a licença MIT. Veja [LICENSE](LICENSE).
-
----
-
-<div align="center">
-Desenvolvido por <b>Carlos Alves Santos Jr</b> · <a href="docs/PORTFOLIO.md">Leia o estudo de caso completo</a>
-</div>
