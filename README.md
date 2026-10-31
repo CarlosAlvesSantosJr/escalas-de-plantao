@@ -1,128 +1,176 @@
-Sistema de Escala Inteligente - Emergência Móvel
-Este é um aplicativo desktop desenvolvido em Python para automatizar a gestão de escalas de plantão para equipes de emergência (Enfermeiros e Motoristas). O sistema utiliza uma lógica de distribuição justa para evitar sobrecarga de trabalho e respeitar a disponibilidade de cada funcionário.
+<div align="center">
 
-Funcionalidades
-Gestão de Ciclos: Defina o período de início e fim da escala de forma flexível.
+<img src="docs/img/samu.jpg" alt="SAMU 192" width="360">
 
-Cadastro de Funcionários: Registro de nomes e cargos (Enfermeiro ou Motorista) com persistência de dados.
+# Escala de Plantão · SAMU 192
 
-Calendário de Disponibilidade: Interface interativa para marcar dias como:
+**Gerador automático de escalas para equipes de ambulância.**
+Monta duplas de enfermeiro(a) e motorista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa.
 
-Disponível: Pode ser escalado normalmente.
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-API-000000?logo=flask&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-pronto-2496ED?logo=docker&logoColor=white)
+![Testes](https://img.shields.io/badge/testes-21%20passando-1E8E5A)
+![Licença](https://img.shields.io/badge/licença-MIT-C8102E)
 
-Indisponível: O sistema nunca o escalará nesse turno.
+[Como rodar](#-como-rodar) · [Funcionalidades](#-funcionalidades) · [Algoritmo](#-como-o-algoritmo-decide) · [Arquitetura](#-arquitetura) · [Estudo de caso](docs/PORTFOLIO.md)
 
-Preferencial: O sistema dará prioridade para este funcionário no turno escolhido.
+</div>
 
-Algoritmo de Escalonamento Inteligente:
+---
 
-Evita dobras de turno (não permite trabalhar dia e noite seguidos).
+![Escala gerada](docs/img/escala.jpg)
 
-Distribui os plantões de forma equilibrada entre os disponíveis.
+## 🚑 O problema
 
-Prioriza quem tem menos plantões acumulados no ciclo.
+O SAMU 192 funciona 24 horas por dia. Cada dia tem dois turnos, **DIA** e **NOITE**, e cada turno precisa de uma equipe completa na viatura: **um(a) enfermeiro(a) e um(a) motorista**. Num mês de 31 dias são 124 posições a preencher.
 
-Exportação para PDF: Gera um documento formatado e pronto para impressão ou compartilhamento via WhatsApp/E-mail.
+Montar essa escala à mão significa cruzar a disponibilidade de cada pessoa, turno a turno, sem deixar viatura descoberta, sem colocar ninguém para trabalhar exausto e dividindo noites e fins de semana de forma justa. Este projeto automatiza esse trabalho.
 
-🛠️ Tecnologias Utilizadas
-Linguagem: Python 3.x
+## ✨ Funcionalidades
 
-Interface Gráfica: tkinter (Nativo do Python)
+| Etapa | O que faz |
+|---|---|
+| **1. Período** | Define o ciclo da escala, com atalhos como "Próximo mês" e um resumo de dias e turnos. |
+| **2. Equipe** | Cadastro de enfermeiros(as) e motoristas, com validação, busca e um alerta quando a equipe é pequena demais para garantir descanso. |
+| **3. Disponibilidade** | Calendário por pessoa com "pincel": **Indisponível**, **Preferencial** ou **Férias**. Clique ou arraste sobre os turnos; clique na data para o dia inteiro ou no dia da semana para todas as ocorrências. Salva sozinho. |
+| **4. Escala** | Geração com um clique, indicadores de cobertura e equilíbrio, motivo de cada vaga, destaque dos turnos de um profissional, visão em calendário ou lista, exportação em PDF. |
 
-Componentes Avançados: tkcalendar (Para seleção de datas)
+<table>
+  <tr>
+    <td><img src="docs/img/equipe.jpg" alt="Cadastro da equipe"></td>
+    <td><img src="docs/img/disponibilidade.jpg" alt="Calendário de disponibilidade"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Cadastro da equipe</sub></td>
+    <td align="center"><sub>Disponibilidade com pincel</sub></td>
+  </tr>
+</table>
 
-Geração de Relatórios: fpdf
+## 🚀 Como rodar
 
-Armazenamento: JSON (Persistência local leve)
+### Com Docker (recomendado)
 
-Como Instalar e Rodar
-Clone o repositório:
+Com o [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado:
 
-Bash
+- **Windows:** dois cliques em `iniciar.bat` (para desligar, `parar.bat`)
+- **macOS / Linux:** `./iniciar.sh`
+
+Ou pelo terminal:
+
+```bash
 git clone https://github.com/CarlosAlvesSantosJr/escalas-de-plantao.git
 cd escalas-de-plantao
-Instale as dependências:
-Você precisará instalar as bibliotecas externas via pip:
+docker compose up -d --build
+```
 
-Bash
-pip install tkcalendar fpdf
+Abra **http://localhost:8080**. Os dados ficam na pasta `./dados`; para fazer backup, basta copiá-la.
 
-Ou para o frontend web use:
+> Guia passo a passo para quem não é da área de tecnologia: [docs/INSTALACAO.md](docs/INSTALACAO.md)
 
-Bash
+### Sem Docker (desenvolvimento)
+
+```bash
 pip install -r requirements.txt
 
-Execute o aplicativo desktop:
+python webapp.py      # versão web em http://localhost:5000
+python app.py         # versão desktop (Tkinter)
+python -m pytest      # testes
+```
 
-Bash
-python app.py
+## 🧠 Como o algoritmo decide
 
-Execute o frontend web:
+**Regras que nunca são violadas:**
 
-Bash
-python webapp.py
+1. **Disponibilidade:** quem está indisponível ou de férias num turno nunca é escalado nele.
+2. **Um plantão por dia:** ninguém trabalha DIA e NOITE na mesma data.
+3. **Descanso pós-noite:** quem sai do turno da NOITE não entra no DIA seguinte.
 
-Em seguida abra no navegador:
+O gerador percorre o período turno a turno. Entre os profissionais elegíveis, escolhe quem tem o menor custo, comparando estes critérios em ordem:
 
-http://localhost:5000
+| # | Critério | Por quê |
+|---|---|---|
+| 1 | **Olhar adiante** | Não escala quem é o único disponível num turno logo à frente, evitando vagas que um algoritmo guloso simples criaria. |
+| 2 | **Ninguém esquecido** | Quem está há 7 dias sem plantão ganha prioridade, salvo se esteve de férias ou indisponível a semana toda. |
+| 3 | **Carga equilibrada** | Vence quem tem menos plantões. O turno preferencial vale um plantão a menos: pesa, sem permitir que uma pessoa fique com todos os turnos. |
+| 4 | **Noites e fins de semana** | Entre empatados, quem fez menos noites e menos fins de semana. |
+| 5 | **Desempate estável** | Quem trabalhou há mais tempo e, por fim, ordem alfabética. Os mesmos dados sempre geram a mesma escala. |
 
-Rodar com Docker (recomendado)
+Turnos que não podem ser preenchidos aparecem como **vaga, com o motivo** (por exemplo, "Todos os motoristas indisponíveis ou de férias").
 
-Com o Docker Desktop instalado, dê dois cliques em iniciar.bat (Windows) ou rode ./iniciar.sh (macOS/Linux). Pelo terminal:
+```mermaid
+flowchart LR
+    A["Para cada dia e turno"] --> B{"Pode trabalhar?<br/>disponível · sem plantão hoje<br/>· não saiu da noite"}
+    B -- Ninguém --> V["VAGA + motivo"]
+    B -- Elegíveis --> C["Ordena pelos 5 critérios"]
+    C --> D["Escala o primeiro<br/>e atualiza contadores"]
+```
 
-Bash
-docker compose up -d --build
+**Resultado com dados reais** (5 enfermeiros e 5 motoristas, outubro de 2026, dados anonimizados): 100% das 124 posições preenchidas, e a diferença máxima de plantões entre enfermeiros caiu de **5 para 3** em relação ao algoritmo original.
 
-Abra http://localhost:8080. Os dados ficam na pasta ./dados. Guia passo a passo para quem não é da área: docs/INSTALACAO.md
+## 🏗️ Arquitetura
 
-Documentação do projeto (contexto, fluxogramas, arquitetura e resultados): docs/PORTFOLIO.md
+Um núcleo de domínio puro e testável, usado pelas duas interfaces.
 
-Rodar os testes:
+```mermaid
+flowchart LR
+    UI["Navegador<br/>HTML · CSS · JS"] -- "JSON via HTTP" --> API["webapp.py<br/>Flask + Gunicorn"]
+    TK["app.py<br/>Tkinter"] --> CORE
+    API --> CORE["escala/<br/>domínio · algoritmo · PDF"]
+    CORE --> DB[("dados_escala.json")]
+```
 
-Bash
-python -m pytest
+```
+escala/
+├── dominio.py         Modelos (Funcionario, Periodo, Plantao) e enums (Cargo, Turno, Status)
+├── algoritmo.py       Geração da escala, sem I/O
+├── repositorio.py     Persistência JSON com escrita atômica (lê o formato antigo)
+└── relatorio_pdf.py   Exportação em PDF
+static/                Frontend web (sem framework, sem build)
+tests/                 Testes das regras e da API
+docs/                  Estudo de caso, fluxogramas e guia de instalação
+webapp.py              API REST Flask
+app.py                 Versão desktop
+Dockerfile · docker-compose.yml · iniciar.bat · iniciar.sh · parar.bat
+```
 
-Estrutura do projeto
+<details>
+<summary><b>Rotas da API</b></summary>
 
-escala/dominio.py       Modelos (Funcionario, Periodo, Plantao) e enums (Cargo, Turno, Status)
-escala/algoritmo.py     Geração da escala (puro, sem UI, testável)
-escala/repositorio.py   Persistência JSON atômica (lê também o formato antigo)
-escala/relatorio_pdf.py Exportação PDF
-webapp.py               API Flask + frontend web (static/)
-app.py                  Versão desktop Tkinter, usando o mesmo núcleo
-tests/                  Testes do algoritmo e da API
+| Método | Rota | Função |
+|---|---|---|
+| `GET` | `/api/estado` | Período e equipe |
+| `PUT` | `/api/periodo` | Define o período (até 92 dias) |
+| `POST` | `/api/funcionarios` | Cadastra profissional |
+| `PUT` / `DELETE` | `/api/funcionarios/<id>` | Edita ou remove |
+| `PATCH` | `/api/funcionarios/<id>/disponibilidade` | Altera disponibilidade em lote |
+| `POST` | `/api/escala` | Gera a escala, com estatísticas e vagas |
+| `GET` | `/api/escala.pdf` | Baixa o PDF |
+| `GET` | `/saude` | Healthcheck |
 
-Regras de Negócio do Algoritmo
-Regras rígidas (nunca violadas):
+</details>
 
-Indisponível / Férias: o profissional nunca é escalado nesse turno.
+## 🛠️ Tecnologias
 
-Um plantão por dia: ninguém trabalha DIA e NOITE no mesmo dia.
+**Backend:** Python 3.12, Flask, Gunicorn, fpdf
+**Frontend:** HTML, CSS e JavaScript puros (ES modules)
+**Desktop:** Tkinter, tkcalendar
+**Infra:** Docker, Docker Compose
+**Qualidade:** pytest (21 testes de regras de negócio e API)
 
-Descanso pós-noite: quem trabalhou à NOITE não pega o DIA seguinte.
+## 🗺️ Próximos passos
 
-Critérios de escolha, em ordem:
+- [ ] Troca de plantão entre profissionais, com aprovação da coordenação
+- [ ] Ajuste manual de um turno direto na escala, com validação das regras
+- [ ] Login e várias bases do SAMU no mesmo sistema
+- [ ] Envio da escala por WhatsApp ou e-mail
 
-1. Olhar adiante: evita escalar alguém que é o único disponível num turno logo à frente (o que criaria uma vaga).
+## 📄 Licença
 
-2. Ninguém fica 7 dias sem plantão, exceto quem esteve bloqueado (férias/indisponível) a janela inteira.
+Distribuído sob a licença MIT. Veja [LICENSE](LICENSE).
 
-3. Carga equilibrada: menor número de plantões. O turno "Preferencial" conta como um plantão a menos, então pesa na escolha sem atropelar a equidade.
+---
 
-4. Equilíbrio de noites e de fins de semana entre a equipe.
-
-5. Quem trabalhou há mais tempo; por fim, ordem alfabética (resultado determinístico).
-
-Vagas que não puderem ser preenchidas aparecem com o motivo (ex.: "Todos os motoristas indisponíveis").
-
-Persistência de Dados
-O sistema gera um arquivo chamado dados_escala.json na mesma pasta do executável. Isso garante que, ao fechar o programa, você não perca os funcionários cadastrados nem as configurações de disponibilidade.
-
-Licença
-Este projeto está sob a licença MIT. Veja o arquivo LICENSE para detalhes.
-
-⭐ Desenvolvido por Carlos Alves Santos Jr
-
-<img width="1920" height="1080" alt="Captura de Tela (118)" src="https://github.com/user-attachments/assets/311e1752-3466-4fd1-a153-b422bc2d8940" />
-<img width="1920" height="1080" alt="Captura de Tela (120)" src="https://github.com/user-attachments/assets/c92ddde2-cef3-406b-8c87-3b61941d00c3" />
-<img width="1920" height="1080" alt="Captura de Tela (119)" src="https://github.com/user-attachments/assets/a25870e6-13f9-426d-8c7f-ecf9db02d449" />
+<div align="center">
+Desenvolvido por <b>Carlos Alves Santos Jr</b> · <a href="docs/PORTFOLIO.md">Leia o estudo de caso completo</a>
+</div>
