@@ -1,0 +1,14 @@
+services:
+  escala:
+    build: .
+    image: escala-plantao-samu:latest
+    container_name: escala-plantao
+    # Acessível só neste computador. Para abrir pelo celular na mesma rede,
+    # troque por "8080:5000" (atenção: a aplicação não tem login).
+    ports:
+      - "127.0.0.1:8080:5000"
+    volumes:
+      # Os dados ficam na pasta ./dados do computador: sobrevivem a
+      # atualizações do container e podem ser copiados como backup.
+      - ./dados:/data
+    restart: unless-stopped

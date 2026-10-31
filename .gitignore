@@ -1,0 +1,9 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Dados locais e arquivos gerados
+dados/
+dados_escala.backup.json
+escala_emergencia.pdf
+escala_samu_*.pdf
