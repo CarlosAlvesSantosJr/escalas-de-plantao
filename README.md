@@ -10,7 +10,7 @@ Monta duplas de enfermeiro(a) e motorista para cada turno, respeita folgas, fér
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Flask](https://img.shields.io/badge/Flask-API-000000?logo=flask&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-pronto-2496ED?logo=docker&logoColor=white)
-![Testes](https://img.shields.io/badge/testes-21%20passando-1E8E5A)
+![Testes](https://img.shields.io/badge/testes-31%20passando-1E8E5A)
 ![Licença](https://img.shields.io/badge/licença-MIT-C8102E)
 
 [Como rodar](#-como-rodar) · [Funcionalidades](#-funcionalidades) · [Algoritmo](#-como-o-algoritmo-decide) · [Arquitetura](#-arquitetura) · [Estudo de caso](docs/PORTFOLIO.md)
@@ -34,7 +34,10 @@ Montar essa escala à mão significa cruzar a disponibilidade de cada pessoa, tu
 | **1. Período** | Define o ciclo da escala, com atalhos como "Próximo mês" e um resumo de dias e turnos. |
 | **2. Equipe** | Cadastro de enfermeiros(as) e motoristas, com validação, busca e um alerta quando a equipe é pequena demais para garantir descanso. |
 | **3. Disponibilidade** | Calendário por pessoa com "pincel": **Indisponível**, **Preferencial** ou **Férias**. Clique ou arraste sobre os turnos; clique na data para o dia inteiro ou no dia da semana para todas as ocorrências. Salva sozinho. |
-| **4. Escala** | Geração com um clique, indicadores de cobertura e equilíbrio, motivo de cada vaga, destaque dos turnos de um profissional, visão em calendário ou lista, exportação em PDF. |
+| **4. Revisão** | Proposta automática que pode ser ajustada à mão: clique num nome, veja quem está livre (e o impedimento de quem não está), troque ou deixe vago. Conflitos com as regras aparecem na hora, com desfazer (Ctrl+Z). Nada vai para a escala final sem confirmação. |
+| **5. Escala** | Versão confirmada, com cores por profissional (ou por função), legenda que destaca os plantões de cada pessoa, indicadores, visão em calendário ou lista, PDF colorido e exportação. Pode ser reaberta para edição. |
+
+**Importar uma escala salva:** na Revisão ou na Escala, use **Importar** com o PDF baixado do sistema ou o arquivo `.json` de **Exportar**. A escala abre na Revisão para edição; o período passa a ser o dela e quem não estiver na equipe é cadastrado automaticamente. PDFs gerados antes desta versão não trazem os dados e não podem ser importados.
 
 <table>
   <tr>
@@ -124,6 +127,7 @@ flowchart LR
 escala/
 ├── dominio.py         Modelos (Funcionario, Periodo, Plantao) e enums (Cargo, Turno, Status)
 ├── algoritmo.py       Geração da escala, sem I/O
+├── avaliacao.py       Estatísticas, vagas e conflitos de qualquer escala (gerada ou editada)
 ├── repositorio.py     Persistência JSON com escrita atômica (lê o formato antigo)
 └── relatorio_pdf.py   Exportação em PDF
 static/                Frontend web (sem framework, sem build)
@@ -144,8 +148,13 @@ Dockerfile · docker-compose.yml · iniciar.bat · iniciar.sh · parar.bat
 | `POST` | `/api/funcionarios` | Cadastra profissional |
 | `PUT` / `DELETE` | `/api/funcionarios/<id>` | Edita ou remove |
 | `PATCH` | `/api/funcionarios/<id>/disponibilidade` | Altera disponibilidade em lote |
-| `POST` | `/api/escala` | Gera a escala, com estatísticas e vagas |
-| `GET` | `/api/escala.pdf` | Baixa o PDF |
+| `GET` / `POST` / `DELETE` | `/api/rascunho` | Consulta, gera ou descarta a escala em revisão |
+| `PATCH` | `/api/rascunho` | Altera posições em lote (`funcionario_id: null` = vago) |
+| `GET` | `/api/rascunho/candidatos` | Quem pode ocupar uma posição e o que cada um quebraria |
+| `GET` / `POST` | `/api/escala` | Consulta a escala final / confirma o rascunho |
+| `POST` | `/api/escala/editar` | Abre uma cópia da escala final para revisão |
+| `POST` | `/api/escala/importar` | Importa `.json` ou PDF gerado pelo sistema (multipart, campo `arquivo`) |
+| `GET` | `/api/escala.pdf` · `/api/escala.json` | Baixa a escala final em PDF ou JSON |
 | `GET` | `/saude` | Healthcheck |
 
 </details>
@@ -156,6 +165,6 @@ Dockerfile · docker-compose.yml · iniciar.bat · iniciar.sh · parar.bat
 **Frontend:** HTML, CSS e JavaScript puros (ES modules)
 **Desktop:** Tkinter, tkcalendar
 **Infra:** Docker, Docker Compose
-**Qualidade:** pytest (21 testes de regras de negócio e API)
+**Qualidade:** pytest (31 testes de regras de negócio e API)
 
 

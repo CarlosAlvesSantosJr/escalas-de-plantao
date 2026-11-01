@@ -3,10 +3,11 @@
 // ===================================================================
 
 const CARGOS = { ENFERMEIRO: "Enfermeiro(a)", MOTORISTA: "Motorista" };
+const CARGO_CURTO = { ENFERMEIRO: "E", MOTORISTA: "M" };
 const STATUS_LABEL = { DISPONIVEL: "Disponível", INDISPONIVEL: "Indisponível", PREFERENCIAL: "Preferencial", FERIAS: "Férias" };
 const DOW = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const TURNOS = ["DIA", "NOITE"];
-const STEPS = ["periodo", "equipe", "disponibilidade", "escala"];
+const STEPS = ["periodo", "equipe", "disponibilidade", "revisao", "escala"];
 const MAX_DIAS = 92;
 
 const state = {
@@ -18,9 +19,14 @@ const state = {
   busca: "",
   dispSelId: null,
   brush: "INDISPONIVEL",
-  escala: null,
-  escalaStale: false,
-  modo: "calendario",
+  rascunho: null,       // escala em revisão (editável)
+  escala: null,         // última escala confirmada
+  origem: null,         // de onde veio o rascunho: { tipo: "editar" | "importar", arquivo }
+  historico: [],        // ajustes da revisão, para desfazer
+  dadosMudaram: false,  // equipe ou disponibilidade mudou depois da proposta
+  recarregar: false,    // escalas precisam ser reavaliadas pelo servidor
+  modo: matchMedia("(max-width: 640px)").matches ? "lista" : "calendario",
+  cores: "profissional",
   destaque: null,
 };
 
@@ -28,6 +34,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const icon = (id, cls = "ic") => `<svg class="${cls}"><use href="#i-${id}"/></svg>`;
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 
 // ---------- datas (sempre em UTC para não sofrer com horário de verão) ----------
 
@@ -37,6 +44,7 @@ const addDias = (d, n) => new Date(d.getTime() + n * 86400000);
 const diaSemana = (d) => (d.getUTCDay() + 6) % 7; // 0 = segunda
 const fmtCurta = (iso) => { const [, m, d] = iso.split("-"); return `${d}/${m}`; };
 const fmtLonga = (iso) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
+const fmtDataHora = (iso) => `${fmtLonga(iso.slice(0, 10))} às ${iso.slice(11, 16)}`;
 
 function diasEntre(inicio, fim) {
   const out = [];
@@ -50,7 +58,9 @@ const ehFds = (iso) => diaSemana(parseISO(iso)) >= 5;
 
 async function api(method, url, body) {
   const opts = { method, headers: {} };
-  if (body !== undefined) {
+  if (body instanceof FormData) {
+    opts.body = body;
+  } else if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(body);
   }
@@ -58,26 +68,35 @@ async function api(method, url, body) {
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = new Error(data.erro || `Erro ${res.status}`);
+    const err = new Error(data.erro || (res.status === 413 ? "Arquivo grande demais." : `Erro ${res.status}`));
     err.status = res.status;
     throw err;
   }
   return data;
 }
 
-function toast(msg, tipo = "ok") {
+/** `acao` opcional: { rotulo, fn } vira um botão no aviso (ex.: Desfazer). */
+function toast(msg, tipo = "ok", acao = null) {
   const el = document.createElement("div");
   el.className = `toast toast--${tipo}`;
-  el.innerHTML = `${icon(tipo === "error" ? "alert" : "check")}<span>${esc(msg)}</span>`;
+  el.innerHTML = `${icon(tipo === "ok" ? "check" : "alert")}<span>${esc(msg)}</span>`;
+  if (acao) {
+    const b = document.createElement("button");
+    b.className = "toast__acao";
+    b.textContent = acao.rotulo;
+    b.addEventListener("click", () => { el.remove(); acao.fn(); });
+    el.append(b);
+  }
   $("#toasts").append(el);
-  setTimeout(() => el.remove(), tipo === "error" ? 5000 : 2600);
+  setTimeout(() => el.remove(), acao ? 6000 : tipo === "ok" ? 2600 : 5000);
 }
 
-function confirmar(titulo, texto, ok = "Confirmar") {
+function confirmar(titulo, texto, ok = "Confirmar", tom = "danger") {
   const dlg = $("#modal-confirm");
   $("#modal-titulo").textContent = titulo;
   $("#modal-texto").textContent = texto;
   $("#modal-ok").textContent = ok;
+  $("#modal-ok").className = `btn btn--${tom}`;
   dlg.showModal();
   return new Promise((resolve) => {
     dlg.addEventListener("close", () => resolve(dlg.returnValue === "ok"), { once: true });
@@ -89,22 +108,43 @@ const iniciais = (nome) => {
   return (partes[0][0] + (partes.length > 1 ? partes.at(-1)[0] : "")).toUpperCase();
 };
 const avatar = (f) => `<span class="avatar c-${f.cargo}" aria-hidden="true">${iniciais(f.nome)}</span>`;
+const avatarCor = (nome, cor) => `<span class="avatar avatar--pc pc-${cor}" aria-hidden="true">${iniciais(nome)}</span>`;
 const porId = (id) => state.funcionarios.find((f) => f.id === id);
 
-function marcarEscalaDesatualizada() {
-  if (state.escala) state.escalaStale = true;
+function marcarDadosAlterados() {
+  state.recarregar = true;
+  if (state.rascunho) state.dadosMudaram = true;
+}
+
+function aplicarEstado(d) {
+  // Período trocado por importação/edição: o formulário da etapa 1 precisa refletir.
+  if (JSON.stringify(d.periodo) !== JSON.stringify(state.periodo)) formPeriodo.inicio.value = "";
+  state.periodo = d.periodo;
+  state.funcionarios = d.funcionarios;
+  if ("rascunho" in d) state.rascunho = d.rascunho;
+  if ("escala" in d) state.escala = d.escala;
+}
+
+async function carregarEstado() {
+  aplicarEstado(await api("GET", "api/estado"));
+  state.recarregar = false;
 }
 
 // ---------- navegação ----------
 
-function irPara(step) {
+async function irPara(step) {
   if (!STEPS.includes(step)) step = "periodo";
   state.step = step;
   if (location.hash !== `#${step}`) history.replaceState(null, "", `#${step}`);
   STEPS.forEach((s) => ($(`#view-${s}`).hidden = s !== step));
   window.scrollTo({ top: Math.min(window.scrollY, $(".hero").offsetHeight), behavior: "smooth" });
-  if (step === "escala" && !state.escala && prontoParaGerar()) gerarEscala();
   render();
+  if ((step === "revisao" || step === "escala") && state.recarregar) {
+    // Equipe ou disponibilidade mudou: o servidor reavalia conflitos e estatísticas.
+    try { await carregarEstado(); } catch (err) { toast(err.message, "error"); }
+    if (state.step === step) render();
+  }
+  if (step === "revisao" && !state.rascunho && !state.escala && prontoParaGerar()) gerarProposta();
 }
 
 function prontoParaGerar() {
@@ -116,7 +156,8 @@ function renderStepper() {
     periodo: !!state.periodo,
     equipe: prontoParaGerar(),
     disponibilidade: state.funcionarios.some((f) => Object.keys(f.disponibilidade).length),
-    escala: !!state.escala && !state.escalaStale,
+    revisao: !!state.escala && !state.rascunho,
+    escala: !!state.escala,
   };
   $$(".step").forEach((b) => {
     const s = b.dataset.step;
@@ -134,14 +175,16 @@ function renderHero() {
   }
   const n = (c) => state.funcionarios.filter((f) => f.cargo === c).length;
   if (state.funcionarios.length) chips.push(`${icon("users")}${n("ENFERMEIRO")} enfermeiros · ${n("MOTORISTA")} motoristas`);
-  if (state.escala) chips.push(`${icon("ambulance")}Cobertura ${Math.round(state.escala.cobertura * 100)}%`);
+  if (state.rascunho) chips.push(`${icon("review")}Revisão em andamento`);
+  if (state.escala) chips.push(`${icon("ambulance")}Escala final · cobertura ${Math.round(state.escala.cobertura * 100)}%`);
   $("#hero-chips").innerHTML = chips.map((c) => `<span class="hero__chip">${c}</span>`).join("");
 }
 
 function render() {
   renderStepper();
   renderHero();
-  ({ periodo: renderPeriodo, equipe: renderEquipe, disponibilidade: renderDisponibilidade, escala: renderEscala })[state.step]();
+  ({ periodo: renderPeriodo, equipe: renderEquipe, disponibilidade: renderDisponibilidade,
+     revisao: renderRevisao, escala: renderEscala })[state.step]();
 }
 
 // ===================================================================
@@ -212,7 +255,7 @@ formPeriodo.addEventListener("submit", async (e) => {
     const dados = await api("PUT", "api/periodo", { inicio, fim });
     const mudou = JSON.stringify(dados.periodo) !== JSON.stringify(state.periodo);
     state.periodo = dados.periodo;
-    if (mudou) { state.escala = null; state.escalaStale = false; }
+    if (mudou) novoRascunho(null); // o servidor descarta o rascunho de outro período
     toast("Período salvo");
     irPara(state.funcionarios.length ? "disponibilidade" : "equipe");
   } catch (err) {
@@ -303,7 +346,7 @@ formFunc.addEventListener("submit", async (e) => {
       state.funcionarios.push(f);
       toast(`${f.nome} adicionado(a)`);
     }
-    marcarEscalaDesatualizada();
+    marcarDadosAlterados();
     editar(null);
     formFunc.nome.focus();
     renderStepper(); renderHero();
@@ -334,7 +377,7 @@ $("#lista-func").addEventListener("click", async (e) => {
       state.funcionarios = state.funcionarios.filter((x) => x.id !== f.id);
       if (state.editingId === f.id) editar(null);
       if (state.dispSelId === f.id) state.dispSelId = null;
-      marcarEscalaDesatualizada();
+      marcarDadosAlterados();
       toast(`${f.nome} removido(a)`);
       render();
     } catch (err) {
@@ -427,7 +470,7 @@ let filaSalvar = Promise.resolve();
 function salvarAlteracoes(f, alteracoes) {
   if (!alteracoes.size) return;
   const lista = [...alteracoes.values()];
-  marcarEscalaDesatualizada();
+  marcarDadosAlterados();
   renderListaDisp();
   renderStepper();
   const estado = $("#save-state");
@@ -502,41 +545,26 @@ document.addEventListener("keydown", (e) => {
   if (idx >= 0) { state.brush = Object.keys(STATUS_LABEL)[idx]; renderBrushes(); }
 });
 
-// ===================================================================
-// 4. ESCALA
-// ===================================================================
 
-async function gerarEscala() {
-  const btn = $("#btn-gerar");
-  btn.classList.add("is-loading");
-  try {
-    state.escala = await api("POST", "api/escala");
-    state.escalaStale = false;
-    state.destaque = null;
-    const v = state.escala.vagas.length;
-    toast(v ? `Escala gerada com ${v} vaga${v > 1 ? "s" : ""} em aberto` : "Escala gerada com cobertura total", v ? "error" : "ok");
-  } catch (err) {
-    toast(err.message, "error");
-  } finally {
-    btn.classList.remove("is-loading");
-    render();
-  }
-}
+// ===================================================================
+// 4. REVISÃO e 5. ESCALA — painel compartilhado
+// ===================================================================
+// As duas etapas mostram a escala do mesmo jeito; na revisão cada posição
+// é um botão que abre o editor. As cores vêm do servidor (`cor`, 0–11) e
+// são as mesmas do PDF.
 
-function renderEscala() {
-  const r = state.escala;
-  $("#escala-vazia").hidden = !!r;
-  $("#escala-conteudo").hidden = !r;
-  $("#banner-stale").hidden = !(r && state.escalaStale);
-  $("#btn-print").disabled = !r;
-  $("#btn-pdf").setAttribute("aria-disabled", String(!r));
-  if (!r) return;
-  renderKpis(r);
-  renderAlertas(r);
-  $$("#modo-escala .tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.modo === state.modo)));
-  $("#escala-view").innerHTML = state.modo === "calendario" ? calendarioEscalaHTML(r) : listaEscalaHTML(r);
-  renderEstatisticas(r);
-  aplicarDestaque();
+const chavePos = (data, turno, cargo) => `${data}|${turno}|${cargo}`;
+const membroDe = (p, cargo) => p[cargo.toLowerCase()];
+const quando = (data, turno) => `${DOW[diaSemana(parseISO(data))]}, ${fmtCurta(data)} · ${turno}`;
+const plantaoDe = (r, data, turno) => r.plantoes.find((p) => p.data === data && p.turno === turno);
+
+function conflitosPorPosicao(r) {
+  const mapa = new Map();
+  r.conflitos.forEach((c) => {
+    const k = chavePos(c.data, c.turno, c.cargo);
+    mapa.set(k, [...(mapa.get(k) || []), c.motivo]);
+  });
+  return mapa;
 }
 
 function equilibrio(r) {
@@ -546,50 +574,88 @@ function equilibrio(r) {
   }));
 }
 
-function renderKpis(r) {
+function kpisHTML(r, editavel) {
   const cob = Math.round(r.cobertura * 100);
-  const preenchidos = r.plantoes.length * 2 - r.vagas.length;
   const eq = equilibrio(r);
+  const nc = r.conflitos.length;
   const kpi = (rotulo, valor, dica, tom) =>
     `<div class="kpi ${tom}"><div class="kpi__label">${rotulo}</div><div class="kpi__value">${valor}</div><div class="kpi__hint">${dica}</div></div>`;
-  $("#kpis").innerHTML = [
+  return [
     kpi("Cobertura", `${cob}%`, "posições preenchidas", cob === 100 ? "is-good" : "is-bad"),
-    kpi("Vagas em aberto", r.vagas.length, r.vagas.length ? "precisam de ajuste manual" : "nenhuma", r.vagas.length ? "is-bad" : "is-good"),
-    kpi("Plantões escalados", preenchidos, `${r.plantoes.length} turnos × 2 profissionais`, ""),
+    kpi("Vagas em aberto", r.vagas.length,
+      r.vagas.length ? (editavel ? "clique na vaga para preencher" : "precisam de ajuste") : "nenhuma",
+      r.vagas.length ? "is-bad" : "is-good"),
+    kpi("Conflitos", nc, nc ? "regras quebradas por ajustes" : "todas as regras respeitadas", nc ? "is-warn" : "is-good"),
     kpi("Equilíbrio", eq <= 1 ? "Ótimo" : `±${eq}`, "diferença máx. de plantões no cargo", eq <= 1 ? "is-good" : eq <= 3 ? "is-warn" : "is-bad"),
   ].join("");
 }
 
-function renderAlertas(r) {
+function alertasHTML(r, editavel) {
+  const item = (x, texto) => {
+    const rotulo = `<strong>${quando(x.data, x.turno)}</strong> — ${CARGOS[x.cargo]}: ${texto}`;
+    return `<li>${editavel ? `<button class="link" data-editar="${chavePos(x.data, x.turno, x.cargo)}">${rotulo}</button>` : rotulo}</li>`;
+  };
   const out = [];
-  if (r.vagas.length) {
-    const itens = r.vagas.map((v) =>
-      `<li><strong>${fmtCurta(v.data)} ${DOW[diaSemana(parseISO(v.data))]} · ${v.turno}</strong> — ${CARGOS[v.cargo]}: ${esc(v.motivo)}</li>`).join("");
-    out.push(`<div class="alert">${icon("alert")}<div><strong>${r.vagas.length} posição(ões) sem profissional.</strong>
-      Revise as indisponibilidades ou amplie a equipe.<ul>${itens}</ul></div></div>`);
-  } else {
-    out.push(`<div class="alert alert--ok">${icon("check")}Todos os turnos têm enfermeiro(a) e motorista.</div>`);
+  if (r.conflitos.length) {
+    const dica = editavel
+      ? "Clique para corrigir, ou confirme assim mesmo se a exceção foi combinada com a equipe."
+      : "A escala foi confirmada com exceções ou a disponibilidade mudou depois. Use <strong>Editar</strong> para ajustar.";
+    out.push(`<div class="alert alert--warn">${icon("alert")}<div><strong>${plural(r.conflitos.length, "conflito", "conflitos")} com as regras.</strong> ${dica}
+      <ul>${r.conflitos.map((c) => item(c, `${esc(c.nome)} · ${esc(c.motivo)}`)).join("")}</ul></div></div>`);
   }
+  if (r.vagas.length) {
+    const dica = editavel ? "Clique para escolher alguém." : "Revise as indisponibilidades ou amplie a equipe.";
+    out.push(`<div class="alert">${icon("alert")}<div><strong>${plural(r.vagas.length, "posição sem profissional", "posições sem profissional")}.</strong> ${dica}
+      <ul>${r.vagas.map((v) => item(v, esc(v.motivo))).join("")}</ul></div></div>`);
+  }
+  if (!out.length) out.push(`<div class="alert alert--ok">${icon("check")}Todos os turnos têm enfermeiro(a) e motorista, sem conflitos.</div>`);
   const ociosos = r.estatisticas.filter((s) => s.total === 0);
   if (ociosos.length) {
-    out.push(`<div class="alert">${icon("alert")}<div><strong>Sem plantões no período:</strong> ${ociosos.map((s) => esc(s.nome)).join(", ")}</div></div>`);
+    out.push(`<div class="alert alert--warn">${icon("alert")}<div><strong>Sem plantões no período:</strong> ${ociosos.map((s) => esc(s.nome)).join(", ")}</div></div>`);
   }
-  $("#alertas").innerHTML = out.join("");
+  return out.join("");
 }
 
-const pessoaHTML = (p, rotulo) =>
-  p ? `<span class="shift__p" data-pid="${p.id}" title="${rotulo}: ${esc(p.nome)}">${rotulo[0]} · ${esc(p.nome)}</span>`
-    : `<span class="shift__p vago">${rotulo[0]} · VAGO</span>`;
-
-function calendarioEscalaHTML(r) {
-  const porDia = new Map();
-  r.plantoes.forEach((p) => {
-    if (!porDia.has(p.data)) porDia.set(p.data, []);
-    porDia.get(p.data).push(p);
+function legendaHTML(r, editavel) {
+  const grupos = Object.keys(CARGOS).map((cargo) => {
+    const pessoas = r.estatisticas.filter((s) => s.cargo === cargo).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    if (!pessoas.length) return "";
+    return `<div class="legend__group" role="group" aria-label="${cargo === "ENFERMEIRO" ? "Enfermagem" : "Motoristas"}">
+      <span class="legend__title">${cargo === "ENFERMEIRO" ? "Enfermagem" : "Motoristas"}</span>
+      ${pessoas.map((s) => `<button class="lchip c-${s.cargo} pc-${s.cor}" data-destacar="${s.id}" aria-pressed="${state.destaque === s.id}"
+          title="Destacar os plantões de ${esc(s.nome)}"><i></i>${esc(s.nome)}<span class="lchip__n">${s.total}</span></button>`).join("")}
+    </div>`;
   });
+  const chaves = [
+    editavel && `<span>${icon("edit", "ic pos__mark")}alterado</span>`,
+    r.conflitos.length && `<span>${icon("alert", "ic pos__flag")}conflito</span>`,
+    r.vagas.length && `<span><span class="pos is-vago pos--chave">VAGO</span></span>`,
+  ].filter(Boolean);
+  return `<div class="legend">${grupos.join("")}${chaves.length ? `<div class="legend__keys">${chaves.join("")}</div>` : ""}</div>`;
+}
+
+function posHTML(p, cargo, conflitos, editavel) {
+  const f = membroDe(p, cargo);
+  const k = chavePos(p.data, p.turno, cargo);
+  const motivos = conflitos.get(k);
+  const editado = editavel && p.editados.includes(cargo);
+  const cls = ["pos", `c-${cargo}`, f ? `pc-${f.cor}` : "is-vago", motivos && "has-conflict", editado && "is-edited"].filter(Boolean).join(" ");
+  const desc = [`${quando(p.data, p.turno)}, ${CARGOS[cargo]}: ${f ? f.nome : "vaga em aberto"}`,
+    motivos && `Conflito: ${motivos.join("; ")}`, editado && "Alterado manualmente"].filter(Boolean).join(". ");
+  const conteudo = `<span class="pos__role" aria-hidden="true">${CARGO_CURTO[cargo]}</span>
+    <span class="pos__name">${f ? esc(f.nome) : "VAGO"}</span>${editado ? icon("edit", "ic pos__mark") : ""}${motivos ? icon("alert", "ic pos__flag") : ""}`;
+  const attrs = `class="${cls}" ${f ? `data-pid="${f.id}"` : ""} title="${esc(desc)}"`;
+  return editavel
+    ? `<button type="button" ${attrs} data-editar="${k}" aria-label="${esc(desc)}. Alterar">${conteudo}</button>`
+    : `<span ${attrs}>${conteudo}</span>`;
+}
+
+function calendarioHTML(r, conflitos, editavel) {
+  const porDia = new Map();
+  r.plantoes.forEach((p) => porDia.set(p.data, [...(porDia.get(p.data) || []), p]));
   const dias = [...porDia.keys()];
   const vazios = diaSemana(parseISO(dias[0]));
-  return `<div class="sched" id="sched">
+  return `<div class="sched">
     ${DOW.map((d, i) => `<div class="cal__dow ${i >= 5 ? "is-weekend" : ""}">${d}</div>`).join("")}
     ${"<div></div>".repeat(vazios)}
     ${dias.map((dia) => `
@@ -598,34 +664,32 @@ function calendarioEscalaHTML(r) {
         ${porDia.get(dia).map((p) => `
           <div class="shift shift--${p.turno}">
             <span class="shift__h">${icon(p.turno === "DIA" ? "sun" : "moon")}${p.turno}</span>
-            ${pessoaHTML(p.enfermeiro, "Enfermeiro(a)")}
-            ${pessoaHTML(p.motorista, "Motorista")}
+            ${Object.keys(CARGOS).map((c) => posHTML(p, c, conflitos, editavel)).join("")}
           </div>`).join("")}
       </div>`).join("")}
   </div>`;
 }
 
-function listaEscalaHTML(r) {
-  const nome = (p) => (p ? `<span class="shift__p" data-pid="${p.id}">${esc(p.nome)}</span>` : `<span class="vago">VAGO</span>`);
-  return `<div class="table-wrap"><table>
-    <thead><tr><th>Data</th><th>Turno</th><th>Enfermeiro(a)</th><th>Motorista</th></tr></thead>
+function listaHTML(r, conflitos, editavel) {
+  return `<div class="table-wrap"><table class="table-escala">
+    <thead><tr><th>Data</th><th>Turno</th><th>Enfermagem</th><th>Condutor</th></tr></thead>
     <tbody>${r.plantoes.map((p) => `
-      <tr class="${ehFds(p.data) ? "is-weekend" : ""}">
-        <td>${fmtLonga(p.data)} · ${DOW[diaSemana(parseISO(p.data))]}</td>
-        <td><span class="turno-pill">${icon(p.turno === "DIA" ? "sun" : "moon")}${p.turno}</span></td>
-        <td>${nome(p.enfermeiro)}</td><td>${nome(p.motorista)}</td>
+      <tr class="${ehFds(p.data) ? "is-weekend" : ""} ${p.turno === "DIA" ? "is-new-day" : ""}">
+        <td>${p.turno === "DIA" ? `${fmtLonga(p.data)} · ${DOW[diaSemana(parseISO(p.data))]}` : ""}</td>
+        <td><span class="turno-pill turno-pill--${p.turno}">${icon(p.turno === "DIA" ? "sun" : "moon")}${p.turno}</span></td>
+        ${Object.keys(CARGOS).map((c) => `<td>${posHTML(p, c, conflitos, editavel)}</td>`).join("")}
       </tr>`).join("")}</tbody></table></div>`;
 }
 
-function renderEstatisticas(r) {
+function estatisticasHTML(r) {
   const max = Math.max(1, ...r.estatisticas.map((s) => s.total));
-  $("#estatisticas").innerHTML = `<div class="table-wrap"><table>
+  return `<div class="table-wrap"><table>
     <thead><tr><th>Profissional</th><th>Plantões</th>
       <th><span class="legend-inline"><span><i style="background:var(--orange)"></i>Dia</span><span><i style="background:var(--navy-700)"></i>Noite</span></span></th>
       <th>Fins de semana</th><th>Preferências atendidas</th></tr></thead>
     <tbody>${r.estatisticas.map((s) => `
-      <tr class="stats-row ${state.destaque === s.id ? "is-active" : ""}" data-id="${s.id}" tabindex="0">
-        <td><div class="person" style="padding:0">${avatar(s)}<div class="person__info"><div class="person__name">${esc(s.nome)}</div>
+      <tr class="stats-row" data-id="${s.id}" tabindex="0">
+        <td><div class="person" style="padding:0">${avatarCor(s.nome, s.cor)}<div class="person__info"><div class="person__name">${esc(s.nome)}</div>
           <div class="person__meta"><span class="badge c-${s.cargo}">${CARGOS[s.cargo]}</span></div></div></div></td>
         <td><strong>${s.total}</strong></td>
         <td><div class="bar" style="width:${Math.max(30, (s.total / max) * 100)}%" title="${s.dias} dia · ${s.noites} noite">
@@ -636,43 +700,329 @@ function renderEstatisticas(r) {
       </tr>`).join("")}</tbody></table></div>`;
 }
 
-function aplicarDestaque() {
-  const id = state.destaque;
-  $("#sched")?.classList.toggle("has-highlight", !!id);
-  $$("#escala-view [data-pid]").forEach((el) => el.classList.toggle("is-highlighted", el.dataset.pid === id));
-  $$("#escala-view .shift").forEach((el) => el.classList.toggle("has-hit", !!id && !!el.querySelector(`[data-pid="${id}"]`)));
-  $$(".stats-row").forEach((tr) => tr.classList.toggle("is-active", tr.dataset.id === id));
-  const s = id && state.escala.estatisticas.find((x) => x.id === id);
-  $("#destaque-info").textContent = s ? `Destacando ${s.nome} · ${s.total} plantões` : "";
+function renderPainel(el, r, editavel) {
+  const conflitos = conflitosPorPosicao(r);
+  const tabs = (attr, aria, opcoes, atual) => opcoes.map(([v, t]) =>
+    `<button role="${aria === "selected" ? "tab" : "radio"}" class="tab" data-${attr}="${v}" aria-${aria}="${atual === v}">${t}</button>`).join("");
+  el.innerHTML = `
+    <div class="kpis">${kpisHTML(r, editavel)}</div>
+    <div class="alerts">${alertasHTML(r, editavel)}</div>
+    <div class="card card--flush">
+      <div class="toolbar">
+        <div class="tabs" role="tablist" aria-label="Visualização">${tabs("modo", "selected", [["calendario", "Calendário"], ["lista", "Lista"]], state.modo)}</div>
+        <div class="toolbar__tools">
+          <div class="tabs" role="radiogroup" aria-label="Colorir por">
+            <span class="tabs__label" aria-hidden="true">Cores</span>
+            ${tabs("cores", "checked", [["profissional", "Por profissional"], ["funcao", "Por função"]], state.cores)}
+          </div>
+          ${editavel ? `<button class="btn btn--ghost btn--sm" data-acao="desfazer" ${state.historico.length ? "" : "disabled"}
+            title="Desfazer o último ajuste (Ctrl+Z)">${icon("undo")}Desfazer</button>` : ""}
+        </div>
+      </div>
+      <div class="escala-area cores-${state.cores}" data-escala>
+        ${legendaHTML(r, editavel)}
+        ${state.modo === "calendario" ? calendarioHTML(r, conflitos, editavel) : listaHTML(r, conflitos, editavel)}
+      </div>
+    </div>
+    <div class="card card--flush card--stats">
+      <div class="toolbar"><h3>Distribuição por profissional</h3><span class="muted small">Clique para destacar na escala</span></div>
+      ${estatisticasHTML(r)}
+    </div>`;
+  aplicarDestaque(el);
 }
 
-$("#btn-gerar").addEventListener("click", gerarEscala);
-$("#btn-regerar").addEventListener("click", gerarEscala);
+function aplicarDestaque(painel) {
+  const id = state.destaque;
+  const area = $("[data-escala]", painel);
+  if (!area) return;
+  area.classList.toggle("has-highlight", !!id);
+  $$(".pos", area).forEach((el) => el.classList.toggle("is-highlighted", !!id && el.dataset.pid === id));
+  $$("[data-destacar]", painel).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.destacar === id)));
+  $$(".stats-row", painel).forEach((tr) => tr.classList.toggle("is-active", tr.dataset.id === id));
+}
+
+function ligarPainel(el, editavel) {
+  el.addEventListener("click", (e) => {
+    const t = e.target;
+    const modo = t.closest("[data-modo]");
+    if (modo) { state.modo = modo.dataset.modo; return render(); }
+    const cores = t.closest("[data-cores]");
+    if (cores) { state.cores = cores.dataset.cores; return render(); }
+    // Na escala final, clicar num nome também destaca a pessoa.
+    const alvo = t.closest("[data-destacar], .stats-row") || (!editavel && t.closest(".pos[data-pid]"));
+    if (alvo) {
+      const id = alvo.dataset.destacar || alvo.dataset.id || alvo.dataset.pid;
+      state.destaque = state.destaque === id ? null : id;
+      aplicarDestaque(el);
+      if (state.destaque && alvo.matches(".stats-row")) $("[data-escala]", el).scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (!editavel) return;
+    if (t.closest('[data-acao="desfazer"]')) return desfazer();
+    const pos = t.closest("[data-editar]");
+    if (pos) abrirEditor(...pos.dataset.editar.split("|"));
+  });
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.matches(".stats-row")) e.target.click();
+  });
+}
+ligarPainel($("#revisao-painel"), true);
+ligarPainel($("#escala-painel"), false);
+
+// ---------- 4. Revisão ----------
+
+function novoRascunho(r, origem = null) {
+  state.rascunho = r;
+  state.origem = r ? origem : null;
+  state.historico = [];
+  state.dadosMudaram = false;
+  state.destaque = null;
+}
+
+function renderRevisao() {
+  const r = state.rascunho;
+  const pronto = prontoParaGerar();
+  $("#revisao-vazia").hidden = !!r;
+  $("#revisao-painel").hidden = !r;
+  $("#btn-proposta").hidden = $("#btn-confirmar").hidden = !r;
+  $("#banner-mudancas").hidden = !(r && state.dadosMudaram);
+  renderBannerOrigem();
+  if (r) return renderPainel($("#revisao-painel"), r, true);
+
+  $("#revisao-vazia-texto").textContent = !pronto
+    ? "Defina o período e cadastre ao menos um(a) enfermeiro(a) e um(a) motorista para gerar uma proposta, ou importe uma escala salva."
+    : state.escala
+      ? "A escala final já foi confirmada. Você pode editá-la, gerar uma nova proposta ou importar uma escala salva."
+      : "Gere uma proposta automática para revisar, ou importe uma escala salva antes.";
+  $('#revisao-vazia [data-acao="editar-final"]').hidden = !state.escala;
+  $('#revisao-vazia [data-acao="nova-proposta"]').disabled = !pronto;
+}
+
+function renderBannerOrigem() {
+  const b = $("#banner-origem");
+  const o = state.rascunho && state.origem;
+  b.hidden = !o;
+  if (!o) return;
+  b.innerHTML = o.tipo === "editar"
+    ? `${icon("edit")}<span>Você está editando uma cópia da escala final. Ela só é substituída quando você confirmar.</span>
+       <button class="btn btn--small" data-acao="descartar">Descartar edição</button>`
+    : `${icon("upload")}<span>Escala importada de <strong>${esc(o.arquivo)}</strong>. Revise e confirme para torná-la a escala final.</span>`;
+}
+
+async function gerarProposta() {
+  const temAjustes = state.historico.length || state.rascunho?.plantoes.some((p) => p.editados.length);
+  if (temAjustes && !(await confirmar("Gerar nova proposta?", "Os ajustes manuais desta revisão serão perdidos.", "Gerar nova proposta"))) return;
+  const botoes = $$('[data-acao="nova-proposta"]');
+  botoes.forEach((b) => b.classList.add("is-loading"));
+  try {
+    novoRascunho(await api("POST", "api/rascunho"));
+    state.recarregar = false;
+    const v = state.rascunho.vagas.length;
+    toast(v ? `Proposta gerada com ${plural(v, "vaga", "vagas")} em aberto` : "Proposta gerada com cobertura total", v ? "warn" : "ok");
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    botoes.forEach((b) => b.classList.remove("is-loading"));
+    render();
+  }
+}
+
+async function confirmarEscala() {
+  const r = state.rascunho;
+  if (!r) return;
+  const pendencias = [r.vagas.length && plural(r.vagas.length, "vaga em aberto", "vagas em aberto"),
+    r.conflitos.length && plural(r.conflitos.length, "conflito", "conflitos")].filter(Boolean);
+  if (pendencias.length || state.escala) {
+    const texto = [pendencias.length && `Ainda há ${pendencias.join(" e ")}. Você pode confirmar assim mesmo e ajustar depois.`,
+      state.escala && "A escala final atual será substituída por esta versão."].filter(Boolean).join(" ");
+    const titulo = pendencias.length ? "Confirmar com pendências?" : "Substituir a escala final?";
+    if (!(await confirmar(titulo, texto, "Confirmar escala", "primary"))) return;
+  }
+  try {
+    state.escala = await api("POST", "api/escala");
+    novoRascunho(null);
+    toast("Escala confirmada");
+    irPara("escala");
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+async function editarFinal() {
+  if (state.rascunho && !(await confirmar("Substituir a revisão em andamento?",
+    "A revisão atual ainda não foi confirmada e será descartada para abrir a escala final.", "Substituir"))) return;
+  try {
+    const d = await api("POST", "api/escala/editar");
+    aplicarEstado(d.estado);
+    novoRascunho(d.rascunho, { tipo: "editar" });
+    irPara("revisao");
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+async function descartarRevisao() {
+  if (!(await confirmar("Descartar a edição?", "Os ajustes feitos nesta revisão serão perdidos. A escala final continua como estava.", "Descartar"))) return;
+  try {
+    await api("DELETE", "api/rascunho");
+    novoRascunho(null);
+    irPara(state.escala ? "escala" : "revisao");
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+// ---------- editor de posição ----------
+
+const modalPos = $("#modal-pos");
+let editando = null; // { data, turno, cargo, origem }
+
+async function abrirEditor(data, turno, cargo) {
+  const atual = membroDe(plantaoDe(state.rascunho, data, turno), cargo);
+  editando = { data, turno, cargo, origem: document.activeElement };
+  $("#pos-quando").innerHTML = `${icon(turno === "DIA" ? "sun" : "moon")}${quando(data, turno)}`;
+  $("#pos-titulo").textContent = `Escolher ${CARGOS[cargo].toLowerCase()}`;
+  $("#pos-atual").textContent = `Atualmente: ${atual ? atual.nome : "vaga em aberto"}`;
+  $("#pos-cands").innerHTML = `<p class="cands__title">Carregando…</p>`;
+  modalPos.showModal();
+  try {
+    renderCandidatos(await api("GET", `api/rascunho/candidatos?${new URLSearchParams({ data, turno, cargo })}`), atual);
+  } catch (err) {
+    modalPos.close();
+    toast(err.message, "error");
+  }
+}
+
+function renderCandidatos(lista, atual) {
+  const cor = new Map(state.rascunho.estatisticas.map((s) => [s.id, s.cor]));
+  const botao = (c) => {
+    const ehAtual = atual?.id === c.id;
+    const meta = c.impedimentos.length
+      ? `<span class="cand__warn">${icon("alert")}${esc(c.impedimentos.join(" · "))}</span>`
+      : `${plural(c.total, "plantão", "plantões")}${c.preferencial ? ` · <span class="cand__pref">${icon("star")}turno preferencial</span>` : ""}`;
+    return `<button class="cand ${c.impedimentos.length ? "is-blocked" : ""}" data-escolher="${c.id}" ${ehAtual ? 'aria-current="true"' : ""}>
+      ${avatarCor(c.nome, cor.get(c.id) ?? 0)}
+      <span class="cand__info"><span class="cand__name">${esc(c.nome)}${ehAtual ? ' <span class="badge badge--atual">Atual</span>' : ""}</span>
+      <span class="cand__meta">${meta}</span></span></button>`;
+  };
+  const livres = lista.filter((c) => !c.impedimentos.length);
+  const bloqueados = lista.filter((c) => c.impedimentos.length);
+  $("#pos-cands").innerHTML = [
+    `<p class="cands__title">${livres.length ? "Podem assumir" : "Ninguém está livre neste turno"}</p>`,
+    livres.map(botao).join(""),
+    bloqueados.length ? `<p class="cands__title">Com impedimento <span class="cands__sub">· pode escalar, mas fica como conflito</span></p>${bloqueados.map(botao).join("")}` : "",
+    atual ? `<button class="cand cand--vago" data-escolher="">${icon("x")}<span class="cand__info"><span class="cand__name">Deixar vago</span>
+      <span class="cand__meta">A posição fica em aberto</span></span></button>` : "",
+  ].join("");
+  ($(".cand:not([aria-current])", modalPos) || $("#pos-fechar")).focus();
+}
+
+$("#pos-cands").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-escolher]");
+  if (!b) return;
+  const { data, turno, cargo } = editando;
+  modalPos.close();
+  if (!b.hasAttribute("aria-current")) alterarPosicao({ data, turno, cargo, funcionario_id: b.dataset.escolher || null });
+});
+$("#pos-fechar").addEventListener("click", () => modalPos.close());
+modalPos.addEventListener("click", (e) => {
+  // Clique no fundo escurecido fecha o editor.
+  const r = modalPos.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) modalPos.close();
+});
+modalPos.addEventListener("close", () => { if (editando?.origem?.isConnected) editando.origem.focus(); });
+
+const assinatura = (c) => `${c.data}|${c.turno}|${c.cargo}|${c.id}|${c.motivo}`;
+
+async function alterarPosicao(alt, desfazendo = false) {
+  const p = plantaoDe(state.rascunho, alt.data, alt.turno);
+  const anterior = { data: alt.data, turno: alt.turno, cargo: alt.cargo,
+    funcionario_id: membroDe(p, alt.cargo)?.id ?? null, editado: p.editados.includes(alt.cargo) };
+  const antes = new Set(state.rascunho.conflitos.map(assinatura));
+  try {
+    state.rascunho = await api("PATCH", "api/rascunho", [alt]);
+  } catch (err) {
+    return toast(err.message, "error");
+  }
+  if (desfazendo) state.historico.pop();
+  else state.historico.push(anterior);
+  render();
+  $(`#revisao-painel [data-editar="${chavePos(alt.data, alt.turno, alt.cargo)}"]`)?.focus();
+  if (desfazendo) return toast("Ajuste desfeito");
+
+  const novo = membroDe(plantaoDe(state.rascunho, alt.data, alt.turno), alt.cargo);
+  const novos = state.rascunho.conflitos.filter((c) => !antes.has(assinatura(c)));
+  const msg = novos.length
+    ? `Ajuste gerou ${plural(novos.length, "conflito", "conflitos")}: ${novos.map((c) => `${c.nome}, ${c.motivo.toLowerCase()}`).join("; ")}`
+    : `${quando(alt.data, alt.turno)} · ${CARGOS[alt.cargo]}: ${novo ? novo.nome : "vaga em aberto"}`;
+  toast(msg, novos.length ? "warn" : "ok", { rotulo: "Desfazer", fn: desfazer });
+}
+
+function desfazer() {
+  const ultimo = state.historico.at(-1);
+  if (ultimo && state.rascunho) alterarPosicao(ultimo, true);
+}
+
+document.addEventListener("keydown", (e) => {
+  if (state.step !== "revisao" || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== "z") return;
+  if (e.target.matches("input, textarea") || $("dialog[open]")) return;
+  e.preventDefault();
+  desfazer();
+});
+
+// ---------- importação ----------
+
+const inputImportar = $("#input-importar");
+
+inputImportar.addEventListener("change", async () => {
+  const arquivo = inputImportar.files[0];
+  inputImportar.value = "";
+  if (!arquivo) return;
+  if (state.rascunho && !(await confirmar("Substituir a revisão em andamento?",
+    `A escala de “${arquivo.name}” vai substituir a revisão atual, que ainda não foi confirmada.`, "Importar"))) return;
+  const corpo = new FormData();
+  corpo.append("arquivo", arquivo);
+  try {
+    const d = await api("POST", "api/escala/importar", corpo);
+    aplicarEstado(d.estado);
+    novoRascunho(d.rascunho, { tipo: "importar", arquivo: arquivo.name });
+    const n = d.adicionados.length;
+    toast(n ? `Escala importada. ${plural(n, "profissional adicionado", "profissionais adicionados")} à equipe: ${d.adicionados.join(", ")}`
+            : "Escala importada para revisão");
+    irPara("revisao");
+  } catch (err) {
+    toast(err.message, "error");
+  }
+});
+
+// ---------- 5. Escala final ----------
+
+function renderEscala() {
+  const r = state.escala;
+  $("#escala-vazia").hidden = !!r;
+  $("#escala-painel").hidden = !r;
+  $("#escala-acoes").hidden = !r;
+  $("#banner-rascunho").hidden = !(r && state.rascunho);
+  $("#escala-sub").textContent = r
+    ? `${fmtLonga(r.periodo.inicio)} a ${fmtLonga(r.periodo.fim)} · confirmada em ${fmtDataHora(r.confirmada_em)}`
+    : "A versão confirmada, pronta para imprimir e distribuir.";
+  if (r) renderPainel($("#escala-painel"), r, false);
+}
+
+// ---------- ações compartilhadas ----------
+
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-acao], [data-importar]");
+  if (!el || el.disabled) return;
+  if (el.hasAttribute("data-importar")) return inputImportar.click();
+  ({ "nova-proposta": gerarProposta, "editar-final": editarFinal, descartar: descartarRevisao })[el.dataset.acao]?.();
+});
+$("#btn-confirmar").addEventListener("click", confirmarEscala);
 $("#btn-print").addEventListener("click", () => window.print());
-$("#modo-escala").addEventListener("click", (e) => {
-  const tab = e.target.closest(".tab");
-  if (tab) { state.modo = tab.dataset.modo; renderEscala(); }
-});
-$("#estatisticas").addEventListener("click", (e) => {
-  const tr = e.target.closest(".stats-row");
-  if (!tr) return;
-  state.destaque = state.destaque === tr.dataset.id ? null : tr.dataset.id;
-  aplicarDestaque();
-  if (state.destaque) $("#escala-view").scrollIntoView({ behavior: "smooth", block: "start" });
-});
-$("#estatisticas").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && e.target.matches(".stats-row")) e.target.click();
-});
 
 // ===================================================================
 // Inicialização
 // ===================================================================
-
-async function carregarEstado() {
-  const dados = await api("GET", "api/estado");
-  state.periodo = dados.periodo;
-  state.funcionarios = dados.funcionarios;
-}
 
 $$(".step").forEach((b) => b.addEventListener("click", () => irPara(b.dataset.step)));
 $$("[data-goto]").forEach((b) => b.addEventListener("click", () => irPara(b.dataset.goto)));
@@ -684,6 +1034,7 @@ window.addEventListener("hashchange", () => irPara(location.hash.slice(1)));
   } catch (err) {
     toast(`Falha ao carregar dados: ${err.message}`, "error");
   }
-  const inicial = location.hash.slice(1) || (!state.periodo ? "periodo" : !prontoParaGerar() ? "equipe" : "escala");
+  const inicial = location.hash.slice(1)
+    || (!state.periodo ? "periodo" : !prontoParaGerar() ? "equipe" : state.escala && !state.rascunho ? "escala" : "revisao");
   irPara(inicial);
 })();

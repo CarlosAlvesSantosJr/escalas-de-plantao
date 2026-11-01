@@ -28,6 +28,11 @@
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 8.5l5-5 5 5M4 20.5h16"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></symbol>
+    <symbol id="i-review" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8M8 12h5M8 16.5l2 2 4-4.5"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 2.5h8l4.5 4.5v14.5H6z"/><path d="M14 2.5V7h4.5M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></symbol>
   </svg>
 
   <header class="hero">
@@ -46,7 +51,8 @@
       <li><button class="step" data-step="periodo"><span class="step__num">1</span><span class="step__label">Período</span></button></li>
       <li><button class="step" data-step="equipe"><span class="step__num">2</span><span class="step__label">Equipe</span></button></li>
       <li><button class="step" data-step="disponibilidade"><span class="step__num">3</span><span class="step__label">Disponibilidade</span></button></li>
-      <li><button class="step" data-step="escala"><span class="step__num">4</span><span class="step__label">Escala</span></button></li>
+      <li><button class="step" data-step="revisao"><span class="step__num">4</span><span class="step__label">Revisão</span></button></li>
+      <li><button class="step" data-step="escala"><span class="step__num">5</span><span class="step__label">Escala</span></button></li>
     </ol>
   </nav>
 
@@ -140,7 +146,7 @@
           <h2>Disponibilidade</h2>
           <p class="muted">Escolha um pincel e clique (ou arraste) nos turnos. Clique na data para marcar o dia inteiro, ou no dia da semana para marcar todas as ocorrências.</p>
         </div>
-        <button class="btn btn--ghost" data-goto="escala">Ir para a escala <svg class="ic"><use href="#i-arrow"/></svg></button>
+        <button class="btn btn--ghost" data-goto="revisao">Ir para a revisão <svg class="ic"><use href="#i-arrow"/></svg></button>
       </div>
       <div class="layout-side layout-side--wide">
         <aside class="card card--flush">
@@ -161,51 +167,72 @@
       </div>
     </section>
 
-    <!-- 4. ESCALA -->
+    <!-- 4. REVISÃO -->
+    <section class="view" id="view-revisao" hidden>
+      <div class="view__head">
+        <div>
+          <h2>Revisão da escala</h2>
+          <p class="muted">Confira a proposta e clique em qualquer nome para trocar a pessoa ou deixar a vaga em aberto. As regras são verificadas a cada ajuste, e nada vai para a escala final até você confirmar.</p>
+        </div>
+        <div class="actions">
+          <button class="btn btn--ghost" data-importar><svg class="ic"><use href="#i-upload"/></svg>Importar</button>
+          <button class="btn btn--ghost" id="btn-proposta" data-acao="nova-proposta" hidden><svg class="ic"><use href="#i-bolt"/></svg>Gerar nova proposta</button>
+          <button class="btn btn--primary" id="btn-confirmar" hidden><svg class="ic"><use href="#i-check"/></svg>Confirmar escala</button>
+        </div>
+      </div>
+      <div class="banner banner--info" id="banner-origem" hidden></div>
+      <div class="banner" id="banner-mudancas" hidden>
+        <svg class="ic"><use href="#i-alert"/></svg>
+        <span>A equipe ou a disponibilidade mudou depois desta proposta. Os conflitos abaixo já consideram as mudanças; quem entrou na equipe só aparece numa nova proposta.</span>
+        <button class="btn btn--small" data-acao="nova-proposta">Gerar nova proposta</button>
+      </div>
+      <div id="revisao-vazia" class="empty" hidden>
+        <svg class="ic ic--xl"><use href="#i-review"/></svg>
+        <h3>Nenhuma escala em revisão</h3>
+        <p class="muted" id="revisao-vazia-texto"></p>
+        <div class="actions actions--center">
+          <button class="btn btn--ghost" data-importar><svg class="ic"><use href="#i-upload"/></svg>Importar arquivo</button>
+          <button class="btn btn--ghost" data-acao="editar-final" hidden><svg class="ic"><use href="#i-edit"/></svg>Editar a escala final</button>
+          <button class="btn btn--primary" data-acao="nova-proposta"><svg class="ic"><use href="#i-bolt"/></svg>Gerar proposta</button>
+        </div>
+      </div>
+      <div class="painel" id="revisao-painel" hidden></div>
+    </section>
+
+    <!-- 5. ESCALA -->
     <section class="view" id="view-escala" hidden>
       <div class="view__head">
         <div>
-          <h2>Escala gerada</h2>
-          <p class="muted">Respeita indisponibilidades, descanso pós-noite e equilíbrio de carga, noites e fins de semana.</p>
+          <h2>Escala final</h2>
+          <p class="muted" id="escala-sub">A versão confirmada, pronta para imprimir e distribuir.</p>
         </div>
-        <div class="actions">
-          <button class="btn btn--ghost" id="btn-print" disabled><svg class="ic"><use href="#i-print"/></svg>Imprimir</button>
-          <a class="btn btn--ghost" id="btn-pdf" href="api/escala.pdf" aria-disabled="true"><svg class="ic"><use href="#i-download"/></svg>PDF</a>
-          <button class="btn btn--primary" id="btn-gerar"><svg class="ic"><use href="#i-bolt"/></svg>Gerar escala</button>
+        <div class="actions" id="escala-acoes">
+          <button class="btn btn--ghost" data-acao="editar-final"><svg class="ic"><use href="#i-edit"/></svg>Editar</button>
+          <button class="btn btn--ghost" id="btn-print"><svg class="ic"><use href="#i-print"/></svg>Imprimir</button>
+          <a class="btn btn--ghost" href="api/escala.json" title="Arquivo para importar e editar depois, inclusive em outro computador"><svg class="ic"><use href="#i-file"/></svg>Exportar</a>
+          <a class="btn btn--primary" href="api/escala.pdf"><svg class="ic"><use href="#i-download"/></svg>Baixar PDF</a>
         </div>
       </div>
-      <div class="banner" id="banner-stale" hidden>
-        <svg class="ic"><use href="#i-alert"/></svg>
-        <span>Os dados mudaram desde a última geração.</span>
-        <button class="btn btn--small" id="btn-regerar">Gerar novamente</button>
+      <div class="banner banner--info" id="banner-rascunho" hidden>
+        <svg class="ic"><use href="#i-review"/></svg>
+        <span>Há uma revisão em andamento que ainda não foi confirmada. Esta página mostra a última versão confirmada.</span>
+        <button class="btn btn--small" data-goto="revisao">Abrir revisão</button>
       </div>
-      <div id="escala-vazia" class="empty">
+      <div id="escala-vazia" class="empty" hidden>
         <svg class="ic ic--xl"><use href="#i-ambulance"/></svg>
-        <h3>Nenhuma escala gerada ainda</h3>
-        <p class="muted">Quando o período e a equipe estiverem prontos, clique em <strong>Gerar escala</strong>.</p>
-      </div>
-      <div id="escala-conteudo" hidden>
-        <div class="kpis" id="kpis"></div>
-        <div class="alerts" id="alertas"></div>
-        <div class="card card--flush">
-          <div class="toolbar">
-            <div class="tabs" role="tablist" id="modo-escala">
-              <button role="tab" class="tab" data-modo="calendario" aria-selected="true">Calendário</button>
-              <button role="tab" class="tab" data-modo="lista" aria-selected="false">Lista</button>
-            </div>
-            <span class="muted small" id="destaque-info"></span>
-          </div>
-          <div id="escala-view"></div>
-        </div>
-        <div class="card card--flush">
-          <div class="toolbar"><h3>Distribuição por profissional</h3><span class="muted small">Clique para destacar na escala</span></div>
-          <div id="estatisticas"></div>
+        <h3>Nenhuma escala confirmada ainda</h3>
+        <p class="muted">Revise a proposta e clique em <strong>Confirmar escala</strong>, ou importe uma escala salva antes.</p>
+        <div class="actions actions--center">
+          <button class="btn btn--ghost" data-importar><svg class="ic"><use href="#i-upload"/></svg>Importar escala</button>
+          <button class="btn btn--primary" data-goto="revisao">Ir para a revisão <svg class="ic"><use href="#i-arrow"/></svg></button>
         </div>
       </div>
+      <div class="painel" id="escala-painel" hidden></div>
     </section>
   </main>
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
+  <input type="file" id="input-importar" accept=".json,.pdf,application/json,application/pdf" hidden>
 
   <dialog class="modal" id="modal-confirm">
     <form method="dialog">
@@ -216,6 +243,20 @@
         <button value="ok" class="btn btn--danger" id="modal-ok">Confirmar</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog class="modal modal--pos" id="modal-pos" aria-labelledby="pos-titulo">
+    <div class="modal__head">
+      <div>
+        <p class="eyebrow" id="pos-quando"></p>
+        <h3 id="pos-titulo"></h3>
+        <p class="muted small" id="pos-atual"></p>
+      </div>
+      <button class="icon-btn" id="pos-fechar" aria-label="Fechar">
+        <svg class="ic"><use href="#i-x"/></svg>
+      </button>
+    </div>
+    <div class="cands" id="pos-cands"></div>
   </dialog>
 
   <script src="js/app.js" type="module"></script>

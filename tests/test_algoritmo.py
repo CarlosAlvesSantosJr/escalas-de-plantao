@@ -3,7 +3,8 @@ from datetime import date, timedelta
 import pytest
 
 from escala.algoritmo import Regras, gerar_escala
-from escala.dominio import Cargo, Funcionario, Periodo, Status, Turno, normalizar_nome
+from escala.avaliacao import avaliar_escala, candidatos
+from escala.dominio import Cargo, Funcionario, Periodo, Plantao, Status, Turno, normalizar_nome
 
 INICIO = date(2026, 11, 2)  # segunda-feira
 
@@ -119,6 +120,30 @@ def test_vaga_informa_motivo():
     motivos = {(v.turno, v.cargo): v.motivo for v in r.vagas}
     assert "Nenhum motorista" in motivos[(Turno.DIA, Cargo.MOTORISTA)]
     assert "descanso" in motivos[(Turno.NOITE, Cargo.ENFERMEIRO)]
+
+
+def test_avaliacao_aponta_cada_conflito_uma_vez():
+    a, m = Funcionario("A", Cargo.ENFERMEIRO), Funcionario("M", Cargo.MOTORISTA)
+    p = periodo(2)
+    plantoes = [Plantao(d, t, {Cargo.ENFERMEIRO: a, Cargo.MOTORISTA: m}) for d, t in p.slots()]
+    r = avaliar_escala([a, m], p, plantoes)
+    motivos = [(c.data, c.turno, c.funcionario.nome, c.motivo) for c in r.conflitos]
+    amanha = INICIO + timedelta(days=1)
+    for nome in ("A", "M"):
+        assert (INICIO, Turno.NOITE, nome, "Já tem outro plantão neste dia") in motivos
+        assert (amanha, Turno.DIA, nome, "Saindo do plantão da noite anterior") in motivos
+    # por pessoa: dois dias com plantão duplo + uma noite emendada no dia
+    assert len(motivos) == 2 * 3
+
+
+def test_candidatos_livres_e_preferenciais_primeiro():
+    funcs = equipe(3, 1)
+    a, b, c = funcs[:3]
+    c.definir_status(INICIO, Turno.DIA, Status.INDISPONIVEL)
+    b.definir_status(INICIO, Turno.DIA, Status.PREFERENCIAL)
+    lista = candidatos(funcs, [], INICIO, Turno.DIA, Cargo.ENFERMEIRO)
+    assert [x.funcionario for x in lista] == [b, a, c]
+    assert lista[-1].impedimentos == ["Indisponível neste turno"]
 
 
 def test_resultado_deterministico():
