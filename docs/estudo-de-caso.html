@@ -151,7 +151,7 @@ footer a { color: #FFB48A; }
     <div>
       <p class="eyebrow">Estudo de caso · Projeto independente</p>
       <h1>Escala de Plantão <span>SAMU 192</span></h1>
-      <p class="cover__lead">Um gerador automático de escalas para as equipes de ambulância do SAMU: monta duplas de enfermeiro(a) e motorista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa.</p>
+      <p class="cover__lead">Um gerador automático de escalas para as equipes de ambulância do SAMU: monta duplas de enfermeiro(a) e motorista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa. A coordenação revisa e ajusta a proposta antes de publicar.</p>
       <dl class="meta">
         <div><dt>Autor</dt><dd>Carlos Alves Santos Jr</dd></div>
         <div><dt>Papel</dt><dd>Produto, backend, frontend e UX</dd></div>
@@ -196,8 +196,8 @@ footer a { color: #FFB48A; }
   <section aria-labelledby="solucao">
     <div class="section-head">
       <span class="kicker">A solução</span>
-      <h2 id="solucao">Quatro passos, da folga ao PDF</h2>
-      <p class="muted prose">A coordenação segue quatro etapas numeradas. O sistema faz a parte difícil: cruza as restrições de todos e devolve uma escala completa, com indicadores de cobertura e equilíbrio.</p>
+      <h2 id="solucao">Cinco passos, da folga ao PDF</h2>
+      <p class="muted prose">A coordenação segue cinco etapas numeradas. O sistema faz a parte difícil: cruza as restrições de todos e propõe uma escala completa. A coordenação revisa, ajusta o que for preciso e só então publica.</p>
     </div>
     <div class="steps">
       <div class="step">
@@ -225,12 +225,34 @@ footer a { color: #FFB48A; }
       <div class="step">
         <div>
           <div class="step__n">4</div>
-          <h3>Escala gerada</h3>
-          <p>Um clique gera a escala. Os indicadores mostram cobertura, vagas e equilíbrio. Cada vaga vem com o motivo. Ao clicar num profissional, os turnos dele ficam destacados. A escala sai em PDF para o grupo da equipe.</p>
+          <h3>Revisão</h3>
+          <p>O sistema propõe a escala, e a coordenação ajusta à mão. Clicar num nome mostra quem pode assumir o turno e por que os outros não podem. Escalar alguém com impedimento é permitido, mas fica marcado como conflito. Todo ajuste pode ser desfeito, e nada é publicado sem confirmação.</p>
         </div>
         <figure>
-          <div class="shot"><img src="img/escala.jpg" alt="Escala gerada em formato de calendário com indicadores de cobertura e equilíbrio" loading="lazy" width="1400" height="1650"></div>
-          <figcaption>Escala de novembro com equipe fictícia: 100% de cobertura.</figcaption>
+          <div class="shot"><img src="img/revisao.jpg" alt="Revisão da escala com a janela de troca aberta, listando quem pode assumir e quem tem impedimento" loading="lazy" width="1400" height="1000"></div>
+          <figcaption>Troca de condutor: livres em cima, impedidos embaixo com o motivo.</figcaption>
+        </figure>
+      </div>
+      <div class="step">
+        <div>
+          <div class="step__n">5</div>
+          <h3>Escala final</h3>
+          <p>Cada profissional ganha uma cor, e a legenda destaca os plantões de quem for clicado. O PDF tem uma página por mês, com DIA e NOITE lado a lado, sem o resumo por pessoa, que fica só para a coordenação. O próprio PDF pode ser importado de volta para edição, inclusive em outro computador.</p>
+        </div>
+        <figure>
+          <div class="shot"><img src="img/escala.jpg" alt="Escala final em calendário com cores por profissional e legenda por equipe" loading="lazy" width="1400" height="1650"></div>
+          <figcaption>Escala de novembro com equipe fictícia: 100% de cobertura, cores por profissional.</figcaption>
+        </figure>
+      </div>
+      <div class="step">
+        <div>
+          <div class="step__n">PDF</div>
+          <h3>Para o grupo da equipe</h3>
+          <p>Uma linha por dia, com as colunas Enfermagem e Condutor em cada turno. Os fins de semana aparecem em destaque e cada nome mantém a cor da tela.</p>
+        </div>
+        <figure>
+          <div class="shot"><img src="img/pdf.jpg" alt="PDF da escala com os turnos DIA e NOITE lado a lado" loading="lazy" width="992" height="1403"></div>
+          <figcaption>O mês inteiro em uma página.</figcaption>
         </figure>
       </div>
     </div>
@@ -240,7 +262,7 @@ footer a { color: #FFB48A; }
     <div class="section-head">
       <span class="kicker">Fluxograma</span>
       <h2 id="fluxo">Fluxo de uso</h2>
-      <p class="muted prose">Do planejamento à publicação da escala. Quando há vaga, o ciclo volta para a disponibilidade até a escala fechar.</p>
+      <p class="muted prose">Do planejamento à publicação da escala. Vagas e conflitos se resolvem na revisão; a escala publicada pode ser reaberta, e uma escala salva pode ser importada direto para a revisão.</p>
     </div>
     <div class="diagram">
 <pre class="mermaid">
@@ -248,16 +270,16 @@ flowchart TD
     A([Coordenação abre o sistema]) --> B["1. Define o período"]
     B --> C["2. Cadastra enfermeiros e motoristas"]
     C --> D["3. Marca indisponível, preferencial e férias"]
-    D --> E["4. Gera a escala"]
-    E --> F{"Todos os turnos cobertos?"}
-    F -- Não --> G["Lê o motivo de cada vaga"]
-    G --> H{"Dá para ajustar?"}
-    H -- "Sim: revisa folgas" --> D
-    H -- "Não: falta gente" --> C
-    F -- Sim --> I{"Distribuição equilibrada?"}
-    I -- Ajustar --> D
-    I -- Sim --> J["Exporta PDF ou imprime"]
-    J --> K([Escala publicada para a equipe])
+    D --> E["4. Revisão: o sistema propõe a escala"]
+    E --> F{"Vagas ou conflitos?"}
+    F -- "Sim: falta gente" --> C
+    F -- "Sim: dá para resolver" --> G["Troca a pessoa no turno<br/>vendo o impedimento de cada um"]
+    G --> F
+    F -- Não --> H["Confirma a escala"]
+    H --> I["5. Escala final: PDF, impressão ou exportação"]
+    I --> K([Escala publicada para a equipe])
+    I -. "Precisa mudar depois" .-> G
+    L(["Escala salva antes<br/>PDF ou .json"]) -. Importar .-> G
 </pre>
     </div>
   </section>
@@ -320,6 +342,7 @@ flowchart LR
         subgraph Nucleo["Pacote escala"]
             DOM["dominio.py<br/>modelos e regras"]
             ALG["algoritmo.py<br/>geração da escala"]
+            AVA["avaliacao.py<br/>vagas, conflitos e estatísticas"]
             REP["repositorio.py<br/>JSON com escrita atômica"]
             PDF["relatorio_pdf.py"]
         end
@@ -327,11 +350,13 @@ flowchart LR
     DB[("dados_escala.json<br/>volume ./dados")]
     UI -- "JSON via HTTP" --> API
     API --> ALG
+    API --> AVA
     API --> REP
     API --> PDF
     TK --> ALG
     TK --> REP
-    ALG --> DOM
+    ALG --> AVA
+    AVA --> DOM
     REP --> DB
 </pre>
     </div>
@@ -346,7 +371,7 @@ flowchart LR
     <div class="results">
       <div class="result is-good"><b>100%</b><span>das 124 posições do mês preenchidas</span></div>
       <div class="result is-good"><b>5 <small>→</small> 3</b><span>diferença máxima de plantões entre enfermeiros</span></div>
-      <div class="result"><b>21</b><span>testes automatizados de regra e API</span></div>
+      <div class="result"><b>31</b><span>testes automatizados de regra e API</span></div>
       <div class="result"><b>&lt;1<small>s</small></b><span>para gerar a escala de um mês</span></div>
     </div>
     <div class="table-wrap" style="margin-top:20px">
@@ -360,6 +385,9 @@ flowchart LR
           <tr><td>Identidade</td><td>Pela posição na lista; nomes repetidos permitidos</td><td>Identificador único; nome duplicado bloqueado</td></tr>
           <tr><td>Dados</td><td>Gravação direta, podia corromper; período se perdia</td><td>Gravação atômica; período salvo; lê o formato antigo</td></tr>
           <tr><td>Uso</td><td>Só no computador com Python instalado</td><td>Navegador, com instalação por Docker em um clique</td></tr>
+          <tr><td>Ajuste manual</td><td>Editar a planilha depois, sem checar as regras</td><td>Revisão na própria escala, com conflitos apontados na hora e desfazer</td></tr>
+          <tr><td>Leitura da escala</td><td>Tabela única, uma linha por turno</td><td>Cores por profissional; PDF de uma página com DIA e NOITE lado a lado</td></tr>
+          <tr><td>Reaproveitamento</td><td>A escala só existia no papel ou no PDF</td><td>O PDF reimporta a escala para edição, inclusive em outro computador</td></tr>
         </tbody>
       </table>
     </div>
@@ -375,7 +403,11 @@ flowchart LR
       <p><strong>Domínio puro e testável.</strong> As regras não conhecem Flask, Tkinter nem JSON. Isso permitiu escrever testes que provam cada regra. Um deles falha de propósito se o "olhar adiante" for desligado.</p>
       <p><strong>Frontend sem build.</strong> HTML, CSS e JavaScript puros, servidos pelo próprio Flask. Não há Node, bundler nem dependências de frontend para manter.</p>
       <p><strong>JSON em vez de banco de dados.</strong> Para uma base com uma coordenação, um arquivo legível é suficiente, simples de copiar como backup e compatível com a versão anterior do app.</p>
-      <p><strong>UX pensada para quem usa.</strong> Pincel com arrastar em vez de clicar várias vezes por turno; atalhos de teclado de 1 a 4; aviso quando a escala fica desatualizada; layout que funciona no celular; identidade visual do SAMU.</p>
+      <p><strong>UX pensada para quem usa.</strong> Pincel com arrastar em vez de clicar várias vezes por turno; atalhos de teclado de 1 a 4; layout que funciona no celular; identidade visual do SAMU.</p>
+      <p><strong>Proposta, não imposição.</strong> O algoritmo sugere; a coordenação decide. A revisão avisa, mas não bloqueia: uma exceção combinada com a equipe vira um conflito visível, não um obstáculo. Rascunho e escala final ficam separados, então editar não mexe na versão publicada até a confirmação.</p>
+      <p><strong>Uma única fonte de regras.</strong> A mesma avaliação mede a escala gerada e a editada à mão. Não existe uma regra no algoritmo e outra na tela.</p>
+      <p><strong>O PDF é o arquivo de troca.</strong> Os dados da escala vão embutidos no PDF que a equipe já recebe, e ele pode ser importado de volta. A coordenação não precisa guardar um segundo arquivo.</p>
+      <p><strong>Cor como apoio, não como único sinal.</strong> Cada profissional tem uma cor, mas o nome e a função estão sempre escritos, com texto escuro sobre fundo claro. O resumo de plantões por pessoa fica só para a coordenação, fora do PDF e da impressão.</p>
     </div>
     <div class="chips" style="margin-top:20px">
       <span class="chip">Python 3.12</span><span class="chip">Flask</span><span class="chip">Gunicorn</span><span class="chip">fpdf</span><span class="chip">JavaScript (ES modules)</span><span class="chip">CSS Grid</span><span class="chip">Docker Compose</span><span class="chip">pytest</span><span class="chip">Tkinter</span>
@@ -402,7 +434,6 @@ docker compose up -d --build
     </div>
     <ul class="stack prose muted" style="padding-left:20px;margin:0">
       <li>Troca de plantão entre profissionais, com aprovação da coordenação.</li>
-      <li>Ajuste manual de um turno direto na escala, com a validação das regras.</li>
       <li>Login e várias bases do SAMU no mesmo sistema.</li>
       <li>Envio da escala por WhatsApp ou e-mail.</li>
     </ul>
@@ -415,3 +446,10 @@ docker compose up -d --build
     <span>Código: <a href="https://github.com/CarlosAlvesSantosJr/escalas-de-plantao">github.com/CarlosAlvesSantosJr/escalas-de-plantao</a></span>
   </div>
 </footer>
+
+<script type="module">
+  // Desenha os fluxogramas (blocos <pre class="mermaid">) no tema claro ou escuro do sistema.
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs";
+  const escuro = matchMedia("(prefers-color-scheme: dark)").matches;
+  mermaid.initialize({ startOnLoad: true, theme: escuro ? "dark" : "neutral", fontFamily: "IBM Plex Sans, system-ui, sans-serif", flowchart: { curve: "basis" } });
+</script>

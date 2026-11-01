@@ -1,12 +1,12 @@
 # Escala de Plantão · SAMU 192
 
 > Estudo de caso · Carlos Alves Santos Jr · 2026
-> Gerador automático de escalas para equipes de ambulância do SAMU: monta duplas de enfermeiro(a) e motorista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa.
+> Gerador automático de escalas para equipes de ambulância do SAMU: monta duplas de enfermeiro(a) e motorista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa. A coordenação revisa e ajusta a proposta antes de publicar.
 
 **Papel:** produto, backend, frontend e UX
 **Stack:** Python 3.12 · Flask · Gunicorn · JavaScript (sem framework) · fpdf · Docker Compose · pytest · Tkinter
 
-![Escala gerada](img/escala.jpg)
+![Escala final com cores por profissional](img/escala.jpg)
 
 ---
 
@@ -35,16 +35,33 @@ Quem coordena a escala precisa encaixar a vida real da equipe nesse quadro: folg
 
 ## 2. A solução
 
-Uma aplicação web em quatro etapas. A coordenação informa as restrições; o sistema cruza tudo e devolve a escala completa, com indicadores de cobertura e equilíbrio.
+Uma aplicação web em cinco etapas. A coordenação informa as restrições; o sistema cruza tudo e propõe a escala completa. A coordenação revisa, ajusta o que for preciso e só então publica.
 
 | Etapa | O que a coordenação faz |
 |---|---|
 | **1. Período** | Define o ciclo, com atalhos como "Próximo mês". |
 | **2. Equipe** | Cadastra os profissionais por função. O painel avisa quando a equipe é pequena demais para garantir descanso. |
 | **3. Disponibilidade** | Escolhe um "pincel" (Indisponível, Preferencial, Férias) e clica ou arrasta sobre os turnos. Clicar na data marca o dia inteiro; clicar em "Seg" marca todas as segundas. Salva sozinho. |
-| **4. Escala** | Gera a escala com um clique. Vê cobertura, vagas (com o motivo) e equilíbrio por pessoa. Exporta em PDF. |
+| **4. Revisão** | Recebe a proposta automática e ajusta à mão: clica num nome, vê quem está livre e por que os outros não estão, troca ou deixa vago. Cada ajuste é checado contra as regras na hora, e dá para desfazer. |
+| **5. Escala** | Confirma a versão final. Cada profissional ganha uma cor, e a legenda destaca os plantões de cada um. Baixa o PDF, imprime ou exporta. A escala pode ser reaberta para edição ou importada em outro computador. |
 
 ![Disponibilidade](img/disponibilidade.jpg)
+
+### Revisão manual
+
+O algoritmo não conhece tudo: uma troca combinada no corredor, alguém que vai cobrir um colega. Por isso a escala gerada é uma **proposta**. Na revisão, clicar num nome abre a lista de quem pode assumir aquele turno, com o número de plantões de cada um, e de quem tem impedimento, com o motivo escrito ("De férias", "Já tem outro plantão neste dia", "Saindo do plantão da noite anterior").
+
+A coordenação pode escalar alguém com impedimento quando a exceção foi combinada. O sistema não bloqueia, mas registra a posição como **conflito**, que aparece nos indicadores e precisa ser confirmada de propósito.
+
+![Revisão com o editor de posição](img/revisao.jpg)
+
+### O PDF para a equipe
+
+Uma página por mês, com uma linha por dia: **DIA** à esquerda e **NOITE** à direita, cada um com **Enfermagem** e **Condutor**. Cada pessoa tem a mesma cor da tela, para achar os próprios plantões de relance. O resumo de plantões por profissional fica só no sistema.
+
+O PDF também carrega os dados da escala embutidos. Assim, o mesmo arquivo que vai para o grupo da equipe serve para **importar** a escala de volta e editá-la, inclusive em outro computador.
+
+![PDF da escala](img/pdf.jpg)
 
 ---
 
@@ -55,16 +72,16 @@ flowchart TD
     A([Coordenação abre o sistema]) --> B["1. Define o período"]
     B --> C["2. Cadastra enfermeiros e motoristas"]
     C --> D["3. Marca indisponível, preferencial e férias"]
-    D --> E["4. Gera a escala"]
-    E --> F{"Todos os turnos cobertos?"}
-    F -- Não --> G["Lê o motivo de cada vaga"]
-    G --> H{"Dá para ajustar?"}
-    H -- "Sim: revisa folgas" --> D
-    H -- "Não: falta gente" --> C
-    F -- Sim --> I{"Distribuição equilibrada?"}
-    I -- Ajustar --> D
-    I -- Sim --> J["Exporta PDF ou imprime"]
-    J --> K([Escala publicada para a equipe])
+    D --> E["4. Revisão: o sistema propõe a escala"]
+    E --> F{"Vagas ou conflitos?"}
+    F -- "Sim: falta gente" --> C
+    F -- "Sim: dá para resolver" --> G["Troca a pessoa no turno<br/>vendo o impedimento de cada um"]
+    G --> F
+    F -- Não --> H["Confirma a escala"]
+    H --> I["5. Escala final: PDF, impressão ou exportação"]
+    I --> K([Escala publicada para a equipe])
+    I -. "Precisa mudar depois" .-> G
+    L(["Escala salva antes<br/>PDF ou .json"]) -. Importar .-> G
 ```
 
 ---
@@ -122,6 +139,7 @@ flowchart LR
         subgraph Nucleo["Pacote escala"]
             DOM["dominio.py<br/>modelos e regras"]
             ALG["algoritmo.py<br/>geração da escala"]
+            AVA["avaliacao.py<br/>vagas, conflitos e estatísticas"]
             REP["repositorio.py<br/>JSON com escrita atômica"]
             PDF["relatorio_pdf.py"]
         end
@@ -129,34 +147,42 @@ flowchart LR
     DB[("dados_escala.json<br/>volume ./dados")]
     UI -- "JSON via HTTP" --> API
     API --> ALG
+    API --> AVA
     API --> REP
     API --> PDF
     TK --> ALG
     TK --> REP
-    ALG --> DOM
+    ALG --> AVA
+    AVA --> DOM
     REP --> DB
 ```
 
 | Caminho | Responsabilidade |
 |---|---|
-| `escala/dominio.py` | Modelos (`Funcionario`, `Periodo`, `Plantao`) e enums (`Cargo`, `Turno`, `Status`) |
+| `escala/dominio.py` | Modelos (`Funcionario`, `Periodo`, `Plantao`, `Escala`) e enums (`Cargo`, `Turno`, `Status`) |
 | `escala/algoritmo.py` | Geração da escala, sem I/O |
-| `escala/repositorio.py` | Persistência JSON com escrita atômica; lê o formato antigo |
-| `escala/relatorio_pdf.py` | Exportação em PDF |
+| `escala/avaliacao.py` | Vagas, conflitos, estatísticas e candidatos de qualquer escala, gerada ou editada |
+| `escala/repositorio.py` | Persistência JSON com escrita atômica: equipe, rascunho em revisão e escala final; lê o formato antigo |
+| `escala/relatorio_pdf.py` | PDF com DIA e NOITE lado a lado, com os dados embutidos para reimportar |
 | `webapp.py` | API REST Flask e frontend em `static/` |
 | `app.py` | Versão desktop, usando o mesmo núcleo |
-| `tests/` | 21 testes de regras e da API |
+| `tests/` | 31 testes de regras e da API |
 
 ### API
 
 | Método | Rota | Função |
 |---|---|---|
-| `GET` | `/api/estado` | Período e equipe |
+| `GET` | `/api/estado` | Período, equipe, rascunho e escala final |
 | `PUT` | `/api/periodo` | Define o período (até 92 dias) |
 | `POST` / `PUT` / `DELETE` | `/api/funcionarios[/<id>]` | Cadastro da equipe |
 | `PATCH` | `/api/funcionarios/<id>/disponibilidade` | Alterações de disponibilidade em lote |
-| `POST` | `/api/escala` | Gera a escala com estatísticas e vagas |
-| `GET` | `/api/escala.pdf` | Baixa o PDF |
+| `GET` / `POST` / `DELETE` | `/api/rascunho` | Consulta, gera ou descarta a escala em revisão |
+| `PATCH` | `/api/rascunho` | Ajusta posições em lote (`funcionario_id: null` = vago) |
+| `GET` | `/api/rascunho/candidatos` | Quem pode ocupar uma posição e o que cada um quebraria |
+| `GET` / `POST` | `/api/escala` | Consulta a escala final / confirma o rascunho |
+| `POST` | `/api/escala/editar` | Reabre a escala final para revisão |
+| `POST` | `/api/escala/importar` | Importa um `.json` exportado ou um PDF gerado pelo sistema |
+| `GET` | `/api/escala.pdf` · `/api/escala.json` | Baixa a escala final |
 | `GET` | `/saude` | Healthcheck do container |
 
 ---
@@ -176,6 +202,9 @@ Comparação entre o algoritmo original e o novo, rodando sobre a disponibilidad
 | Identidade | Pela posição na lista; nomes repetidos permitidos | Identificador único; nome duplicado bloqueado |
 | Dados | Gravação direta, podia corromper; período se perdia | Gravação atômica; período salvo |
 | Uso | Só com Python instalado | Navegador, com instalação por Docker em um clique |
+| Ajuste manual | Editar a planilha depois, sem checar as regras | Revisão na própria escala, com conflitos apontados na hora e desfazer |
+| Leitura da escala | Tabela única, uma linha por turno | Cores por profissional; PDF de uma página com DIA e NOITE lado a lado |
+| Reaproveitamento | A escala só existia no papel ou no PDF | O PDF reimporta a escala para edição, inclusive em outro computador |
 
 ---
 
@@ -186,7 +215,13 @@ Comparação entre o algoritmo original e o novo, rodando sobre a disponibilidad
 - **Frontend sem build.** HTML, CSS e JavaScript puros, servidos pelo Flask. Não há Node nem bundler para manter.
 - **JSON em vez de banco.** Para uma base com uma coordenação, um arquivo legível basta, é fácil de copiar como backup e é compatível com a versão anterior.
 - **Container enxuto e seguro.** Imagem `python:3.12-slim` (cerca de 190 MB), usuário sem privilégios, healthcheck, porta exposta só para o próprio computador e dados num volume.
-- **UX para quem usa.** Pincel com arrastar, atalhos de teclado de 1 a 4, aviso de escala desatualizada, layout que funciona no celular e a identidade visual do SAMU.
+- **UX para quem usa.** Pincel com arrastar, atalhos de teclado de 1 a 4, layout que funciona no celular e a identidade visual do SAMU.
+- **Proposta, não imposição.** O algoritmo sugere; a coordenação decide. A revisão avisa, mas não bloqueia: uma exceção combinada com a equipe vira um conflito visível em vez de um obstáculo.
+- **Uma única fonte de regras.** A mesma avaliação (`avaliacao.py`) mede a escala gerada e a editada à mão. Não existe uma regra no algoritmo e outra na tela.
+- **Rascunho separado da escala final.** Editar não mexe na versão publicada até a confirmação, e dá para descartar a edição.
+- **O PDF é o arquivo de troca.** Os dados vão embutidos no PDF que a equipe já recebe. A coordenação não precisa guardar um segundo arquivo para reabrir a escala depois.
+- **Cor como apoio, não como único sinal.** Cada profissional tem uma cor, mas o nome e a função estão sempre escritos, com texto escuro sobre fundo claro. Quem não distingue cores lê a escala do mesmo jeito.
+- **Privacidade da equipe.** O resumo de plantões por pessoa serve à coordenação e fica fora do PDF e da impressão.
 
 ---
 
@@ -204,6 +239,5 @@ No Windows, basta um duplo clique em `iniciar.bat`. Veja o [guia de instalação
 ## 9. Próximos passos
 
 - Troca de plantão entre profissionais, com aprovação da coordenação.
-- Ajuste manual de um turno direto na escala, com a validação das regras.
 - Login e várias bases do SAMU no mesmo sistema.
 - Envio da escala por WhatsApp ou e-mail.

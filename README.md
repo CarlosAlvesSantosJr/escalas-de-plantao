@@ -19,13 +19,13 @@ Monta duplas de enfermeiro(a) e motorista para cada turno, respeita folgas, fér
 
 ---
 
-![Escala gerada](docs/img/escala.jpg)
+![Escala final com cores por profissional](docs/img/escala.jpg)
 
 ## 🚑 O problema
 
 O SAMU 192 funciona 24 horas por dia. Cada dia tem dois turnos, **DIA** e **NOITE**, e cada turno precisa de uma equipe completa na viatura: **um(a) enfermeiro(a) e um(a) motorista**. Num mês de 31 dias são 124 posições a preencher.
 
-Montar essa escala à mão significa cruzar a disponibilidade de cada pessoa, turno a turno, sem deixar viatura descoberta, sem colocar ninguém para trabalhar exausto e dividindo noites e fins de semana de forma justa. Este projeto automatiza esse trabalho.
+Montar essa escala à mão significa cruzar a disponibilidade de cada pessoa, turno a turno, sem deixar viatura descoberta, sem colocar ninguém para trabalhar exausto e dividindo noites e fins de semana de forma justa. Este projeto automatiza esse trabalho e deixa a palavra final com a coordenação: a proposta automática pode ser revisada e ajustada à mão antes de ser publicada.
 
 ## ✨ Funcionalidades
 
@@ -35,9 +35,15 @@ Montar essa escala à mão significa cruzar a disponibilidade de cada pessoa, tu
 | **2. Equipe** | Cadastro de enfermeiros(as) e motoristas, com validação, busca e um alerta quando a equipe é pequena demais para garantir descanso. |
 | **3. Disponibilidade** | Calendário por pessoa com "pincel": **Indisponível**, **Preferencial** ou **Férias**. Clique ou arraste sobre os turnos; clique na data para o dia inteiro ou no dia da semana para todas as ocorrências. Salva sozinho. |
 | **4. Revisão** | Proposta automática que pode ser ajustada à mão: clique num nome, veja quem está livre (e o impedimento de quem não está), troque ou deixe vago. Conflitos com as regras aparecem na hora, com desfazer (Ctrl+Z). Nada vai para a escala final sem confirmação. |
-| **5. Escala** | Versão confirmada, com cores por profissional (ou por função), legenda que destaca os plantões de cada pessoa, indicadores, visão em calendário ou lista, PDF colorido e exportação. Pode ser reaberta para edição. |
+| **5. Escala** | Versão confirmada, com cores por profissional (ou por função), legenda que destaca os plantões de cada pessoa, indicadores e visão em calendário ou lista. Sai em PDF, imprime e exporta. Pode ser reaberta para edição. |
 
-**Importar uma escala salva:** na Revisão ou na Escala, use **Importar** com o PDF baixado do sistema ou o arquivo `.json` de **Exportar**. A escala abre na Revisão para edição; o período passa a ser o dela e quem não estiver na equipe é cadastrado automaticamente. PDFs gerados antes desta versão não trazem os dados e não podem ser importados.
+### O PDF para a equipe
+
+Uma página por mês, com uma linha por dia: o turno **DIA** à esquerda e a **NOITE** à direita, cada um com as colunas **Enfermagem** e **Condutor**. Cada profissional mantém a mesma cor da tela, e os fins de semana aparecem em destaque. O resumo de plantões por profissional fica só no sistema, para a coordenação; não vai no PDF nem na impressão.
+
+### Importar uma escala salva
+
+Na Revisão ou na Escala, use **Importar** com o **PDF baixado do sistema** (ele carrega os dados da escala embutidos) ou com o arquivo `.json` do botão **Exportar**. A escala abre na Revisão para ser editada; o período passa a ser o dela e quem não estiver na equipe é cadastrado automaticamente. É assim também que se leva uma escala para outro computador. PDFs gerados antes desta versão não trazem os dados e não podem ser importados.
 
 <table>
   <tr>
@@ -47,6 +53,14 @@ Montar essa escala à mão significa cruzar a disponibilidade de cada pessoa, tu
   <tr>
     <td align="center"><sub>Cadastro da equipe</sub></td>
     <td align="center"><sub>Disponibilidade com pincel</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/img/revisao.jpg" alt="Revisão com o editor de posição aberto"></td>
+    <td><img src="docs/img/pdf.jpg" alt="PDF da escala com DIA e NOITE lado a lado"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Revisão: troca manual com impedimentos de cada pessoa</sub></td>
+    <td align="center"><sub>PDF para a equipe: DIA e NOITE lado a lado</sub></td>
   </tr>
 </table>
 
@@ -67,7 +81,7 @@ cd escalas-de-plantao
 docker compose up -d --build
 ```
 
-Abra **http://localhost:8080**. Os dados ficam na pasta `./dados`; para fazer backup, basta copiá-la.
+Abra **http://localhost:8080**. Os dados (equipe, disponibilidade, revisão em andamento e escala final) ficam na pasta `./dados`; para fazer backup, basta copiá-la.
 
 > Guia passo a passo para quem não é da área de tecnologia: [docs/INSTALACAO.md](docs/INSTALACAO.md)
 
@@ -101,6 +115,8 @@ O gerador percorre o período turno a turno. Entre os profissionais elegíveis, 
 
 Turnos que não podem ser preenchidos aparecem como **vaga, com o motivo** (por exemplo, "Todos os motoristas indisponíveis ou de férias").
 
+**Na revisão manual, as mesmas regras continuam valendo.** A coordenação pode escalar alguém mesmo com impedimento, porque às vezes a exceção foi combinada com a equipe, mas a posição fica marcada como **conflito** e aparece nos indicadores até ser resolvida ou confirmada. A avaliação (`escala/avaliacao.py`) é a mesma para a escala gerada e para a editada à mão.
+
 ```mermaid
 flowchart LR
     A["Para cada dia e turno"] --> B{"Pode trabalhar?<br/>disponível · sem plantão hoje<br/>· não saiu da noite"}
@@ -119,8 +135,8 @@ Um núcleo de domínio puro e testável, usado pelas duas interfaces.
 flowchart LR
     UI["Navegador<br/>HTML · CSS · JS"] -- "JSON via HTTP" --> API["webapp.py<br/>Flask + Gunicorn"]
     TK["app.py<br/>Tkinter"] --> CORE
-    API --> CORE["escala/<br/>domínio · algoritmo · PDF"]
-    CORE --> DB[("dados_escala.json")]
+    API --> CORE["escala/<br/>domínio · algoritmo · avaliação · PDF"]
+    CORE --> DB[("dados_escala.json<br/>equipe · rascunho · escala final")]
 ```
 
 ```
@@ -128,8 +144,8 @@ escala/
 ├── dominio.py         Modelos (Funcionario, Periodo, Plantao) e enums (Cargo, Turno, Status)
 ├── algoritmo.py       Geração da escala, sem I/O
 ├── avaliacao.py       Estatísticas, vagas e conflitos de qualquer escala (gerada ou editada)
-├── repositorio.py     Persistência JSON com escrita atômica (lê o formato antigo)
-└── relatorio_pdf.py   Exportação em PDF
+├── repositorio.py     Persistência JSON com escrita atômica (equipe, rascunho e escala final)
+└── relatorio_pdf.py   PDF com DIA e NOITE lado a lado, com os dados embutidos para reimportar
 static/                Frontend web (sem framework, sem build)
 tests/                 Testes das regras e da API
 docs/                  Estudo de caso, fluxogramas e guia de instalação
@@ -143,7 +159,7 @@ Dockerfile · docker-compose.yml · iniciar.bat · iniciar.sh · parar.bat
 
 | Método | Rota | Função |
 |---|---|---|
-| `GET` | `/api/estado` | Período e equipe |
+| `GET` | `/api/estado` | Período, equipe, rascunho e escala final |
 | `PUT` | `/api/periodo` | Define o período (até 92 dias) |
 | `POST` | `/api/funcionarios` | Cadastra profissional |
 | `PUT` / `DELETE` | `/api/funcionarios/<id>` | Edita ou remove |
