@@ -20,11 +20,12 @@ Critérios de desempate, em ordem de importância:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, timedelta
 
-from .dominio import (Cargo, Funcionario, Periodo, Plantao, Slot, Status, Turno,
-                      eh_fim_de_semana)
+# ResultadoEscala e afins moram em `avaliacao`; reexportados aqui por compatibilidade.
+from .avaliacao import EstatisticaFuncionario, ResultadoEscala, Vaga, avaliar_escala  # noqa: F401
+from .dominio import Cargo, Funcionario, Periodo, Plantao, Slot, Status, Turno, eh_fim_de_semana
 
 
 @dataclass(frozen=True)
@@ -32,66 +33,27 @@ class Regras:
     max_dias_sem_plantao: int = 7
 
 
-@dataclass
-class EstatisticaFuncionario:
-    funcionario: Funcionario
-    total: int = 0
-    noites: int = 0
-    fins_de_semana: int = 0
-    preferenciais_atendidas: int = 0
-    ultimo: Slot | None = None
-
-    @property
-    def dias(self) -> int:
-        return self.total - self.noites
-
-
-@dataclass(frozen=True)
-class Vaga:
-    data: date
-    turno: Turno
-    cargo: Cargo
-    motivo: str
-
-
-@dataclass
-class ResultadoEscala:
-    periodo: Periodo
-    plantoes: list[Plantao]
-    estatisticas: list[EstatisticaFuncionario]
-    vagas: list[Vaga] = field(default_factory=list)
-
-    @property
-    def cobertura(self) -> float:
-        total = len(self.plantoes) * len(Cargo)
-        return 1.0 if total == 0 else (total - len(self.vagas)) / total
-
-
 class GeradorEscala:
     def __init__(self, funcionarios: list[Funcionario], periodo: Periodo,
                  regras: Regras = Regras()):
         self.periodo = periodo
         self.regras = regras
+        self._funcionarios = funcionarios
         self._por_cargo = {c: [f for f in funcionarios if f.cargo is c] for c in Cargo}
         self._stats = {f.id: EstatisticaFuncionario(f) for f in funcionarios}
 
     def gerar(self) -> ResultadoEscala:
         plantoes: list[Plantao] = []
-        vagas: list[Vaga] = []
         for dia, turno in self.periodo.slots():
             plantao = Plantao(dia, turno)
             for cargo in Cargo:
                 escolhido = self._escolher(dia, turno, cargo)
                 plantao.equipe[cargo] = escolhido
                 if escolhido:
-                    self._registrar(escolhido, dia, turno)
-                else:
-                    vagas.append(Vaga(dia, turno, cargo, self._motivo_vaga(dia, turno, cargo)))
+                    self._stats[escolhido.id].registrar(dia, turno)
             plantoes.append(plantao)
-
-        estatisticas = sorted(self._stats.values(),
-                              key=lambda s: (s.funcionario.cargo.value, -s.total, s.funcionario.nome))
-        return ResultadoEscala(self.periodo, plantoes, estatisticas, vagas)
+        # Estatísticas, vagas e motivos saem da mesma avaliação usada na revisão manual.
+        return avaliar_escala(self._funcionarios, self.periodo, plantoes)
 
     # --- seleção -------------------------------------------------------
 
@@ -153,23 +115,6 @@ class GeradorEscala:
             return False
         # Quem passou a janela inteira bloqueado (férias, afastamento) está isento.
         return not all(f.bloqueado_o_dia_todo(dia - timedelta(days=i)) for i in range(limite))
-
-    def _registrar(self, f: Funcionario, dia: date, turno: Turno) -> None:
-        st = self._stats[f.id]
-        st.total += 1
-        st.noites += turno is Turno.NOITE
-        st.fins_de_semana += eh_fim_de_semana(dia)
-        st.preferenciais_atendidas += f.status(dia, turno) is Status.PREFERENCIAL
-        st.ultimo = (dia, turno)
-
-    def _motivo_vaga(self, dia: date, turno: Turno, cargo: Cargo) -> str:
-        equipe = self._por_cargo[cargo]
-        nome_cargo = cargo.value.lower()
-        if not equipe:
-            return f"Nenhum {nome_cargo} cadastrado"
-        if not any(f.pode_trabalhar(dia, turno) for f in equipe):
-            return f"Todos os {nome_cargo}s indisponíveis ou de férias"
-        return "Disponíveis já cumprem descanso obrigatório"
 
 
 def gerar_escala(funcionarios: list[Funcionario], periodo: Periodo,

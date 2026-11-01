@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Iterator
 
@@ -12,6 +12,10 @@ from typing import Iterator
 class Cargo(str, Enum):
     ENFERMEIRO = "ENFERMEIRO"
     MOTORISTA = "MOTORISTA"
+
+    @property
+    def rotulo(self) -> str:
+        return "Enfermeiro(a)" if self is Cargo.ENFERMEIRO else "Motorista"
 
 
 class Turno(str, Enum):
@@ -102,6 +106,8 @@ class Plantao:
     data: date
     turno: Turno
     equipe: dict[Cargo, Funcionario | None] = field(default_factory=dict)
+    # Posições alteradas à mão na revisão (o algoritmo não as escolheu).
+    editados: set[Cargo] = field(default_factory=set)
 
     @property
     def enfermeiro(self) -> Funcionario | None:
@@ -114,6 +120,24 @@ class Plantao:
     @property
     def completo(self) -> bool:
         return all(self.equipe.get(c) is not None for c in Cargo)
+
+
+@dataclass
+class Escala:
+    """Escala salva: o rascunho em revisão ou a versão final confirmada."""
+    periodo: Periodo
+    plantoes: list[Plantao]
+    confirmada_em: datetime | None = None
+
+    def plantao(self, dia: date, turno: Turno) -> Plantao:
+        for p in self.plantoes:
+            if p.data == dia and p.turno is turno:
+                return p
+        raise KeyError((dia, turno))
+
+    def pessoas(self) -> dict[str, Funcionario]:
+        """Todos que aparecem na escala, inclusive quem já saiu da equipe."""
+        return {f.id: f for p in self.plantoes for f in p.equipe.values() if f}
 
 
 def eh_fim_de_semana(dia: date) -> bool:
