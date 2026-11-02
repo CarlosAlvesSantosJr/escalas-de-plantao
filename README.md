@@ -63,38 +63,6 @@ Na Revisão ou na Escala, use **Importar** com o **PDF baixado do sistema** (ele
     <td align="center"><sub>PDF para a equipe: DIA e NOITE lado a lado</sub></td>
   </tr>
 </table>
-
-## 🚀 Como rodar
-
-### Com Docker (recomendado)
-
-Com o [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado:
-
-- **Windows:** dois cliques em `iniciar.bat` (para desligar, `parar.bat`)
-- **macOS / Linux:** `./iniciar.sh`
-
-Ou pelo terminal:
-
-```bash
-git clone https://github.com/CarlosAlvesSantosJr/escalas-de-plantao.git
-cd escalas-de-plantao
-docker compose up -d --build
-```
-
-Abra **http://localhost:8080**. Os dados (equipe, disponibilidade, revisão em andamento e escala final) ficam na pasta `./dados`; para fazer backup, basta copiá-la.
-
-> Guia passo a passo para quem não é da área de tecnologia: [docs/INSTALACAO.md](docs/INSTALACAO.md)
-
-### Sem Docker (desenvolvimento)
-
-```bash
-pip install -r requirements.txt
-
-python webapp.py      # versão web em http://localhost:5000
-python app.py         # versão desktop (Tkinter)
-python -m pytest      # testes
-```
-
 ## 🧠 Como o algoritmo decide
 
 **Regras que nunca são violadas:**
