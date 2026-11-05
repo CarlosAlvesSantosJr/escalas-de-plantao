@@ -15,7 +15,7 @@ const TURNOS = ["DIA", "NOITE"];
 const STEPS = ["periodo", "equipe", "disponibilidade", "revisao", "escala"];
 const VIEWS = [...STEPS, "auditoria"];
 const MAX_DIAS = 92;
-const INTERVALO_ATUALIZACAO = 4000; // ms entre consultas de mudanças feitas por outras pessoas
+const INTERVALO_ATUALIZACAO = 3000; // ms entre consultas de mudanças feitas por outras pessoas
 
 const state = {
   usuario: null,        // { nome, papel, admin }
@@ -810,6 +810,7 @@ function novoRascunho(r, origem = null) {
   state.historico = [];
   state.dadosMudaram = false;
   state.destaque = null;
+  state.finalMudou = null;
 }
 
 function renderRevisao() {
@@ -819,6 +820,7 @@ function renderRevisao() {
   $("#revisao-painel").hidden = !r;
   $("#btn-proposta").hidden = $("#btn-confirmar").hidden = !r;
   $("#banner-mudancas").hidden = !(r && state.dadosMudaram);
+  renderBannerFinalMudou();
   renderBannerOrigem();
   if (r) return renderPainel($("#revisao-painel"), r, true);
 
@@ -830,6 +832,18 @@ function renderRevisao() {
   $('#revisao-vazia [data-acao="editar-final"]').hidden = !state.escala;
   $('#revisao-vazia [data-acao="nova-proposta"]').disabled = !pronto;
 }
+
+/** A escala confirmada recebeu trocas enquanto o ADM revisava uma cópia dela. */
+function renderBannerFinalMudou() {
+  const b = $("#banner-final-mudou");
+  const ev = state.rascunho && state.finalMudou;
+  b.hidden = !ev;
+  if (!ev) return;
+  b.innerHTML = `${icon("alert")}<span><strong>${esc(ev.usuario)}</strong> trocou um plantão na escala confirmada
+    enquanto esta revisão estava aberta (${esc(ev.descricao)}). Se você confirmar esta revisão, ela substitui essas trocas.</span>
+    <button class="btn btn--small" data-goto-escala>Ver escala</button>`;
+}
+$("#banner-final-mudou").addEventListener("click", (e) => { if (e.target.closest("[data-goto-escala]")) irPara("escala"); });
 
 function renderBannerOrigem() {
   const b = $("#banner-origem");
@@ -1139,8 +1153,9 @@ $("#audit-categoria").addEventListener("change", renderAuditoria);
 // A cada poucos segundos pergunta ao servidor se os dados mudaram (consulta leve).
 // Se mudaram, recarrega e avisa quem fez a alteração.
 
-const vivo = { versao: null, ultimoEvento: null, falhas: 0 };
+const vivo = { versao: null, ultimoEvento: null, falhas: 0, rodando: false, ocultaDesde: null };
 const chaveEvento = (ev) => ev && `${ev.quando}|${ev.usuario}|${ev.descricao}`;
+const RECARREGAR_APOS_OCULTA = 2 * 60 * 1000; // aba escondida por mais tempo volta com a página recarregada
 
 function ocupado() {
   const foco = document.activeElement;
@@ -1154,7 +1169,16 @@ function setAoVivo(ok) {
 }
 
 async function verificarAtualizacoes() {
-  if (document.hidden) return;
+  if (vivo.rodando) return; // intervalo, foco e volta da aba podem disparar juntos
+  vivo.rodando = true;
+  try {
+    await verificar();
+  } finally {
+    vivo.rodando = false;
+  }
+}
+
+async function verificar() {
   let v;
   try {
     v = await api("GET", "api/versao");
@@ -1164,38 +1188,56 @@ async function verificarAtualizacoes() {
     if (++vivo.falhas >= 2) setAoVivo(false);
     return;
   }
-  if (vivo.versao === null) {
-    vivo.versao = v.versao;
-    vivo.ultimoEvento = chaveEvento(v.ultima);
+  // Outra pessoa entrou neste mesmo navegador: a sessão mudou para todas as abas.
+  // Recarrega para a tela assumir o nome e o perfil de quem está logado agora.
+  if (v.usuario && v.usuario !== state.usuario.nome) {
+    location.reload();
     return;
   }
   if (v.versao === vivo.versao || ocupado()) return; // ocupado: tenta de novo na próxima volta
+  const primeira = vivo.versao === null;
   try {
-    await carregarEstado();
+    await carregarEstado(); // na primeira volta também: pega trocas feitas enquanto a tela abria
   } catch {
     return;
   }
   vivo.versao = v.versao;
   const ev = v.ultima;
-  if (ev && chaveEvento(ev) !== vivo.ultimoEvento) {
-    vivo.ultimoEvento = chaveEvento(ev);
-    if (ev.usuario !== state.usuario.nome) {
-      toast(`${ev.usuario} · ${ev.descricao}`, "warn");
-      const d = ev.detalhes;
-      if (d?.data) {
-        const k = chavePos(d.data, d.turno, d.cargo);
-        state.recentes.add(k);
-        setTimeout(() => state.recentes.delete(k), 6000);
-      }
-    }
-  }
+  const chave = chaveEvento(ev);
+  if (!primeira && ev && chave !== vivo.ultimoEvento && ev.usuario !== state.usuario.nome) avisarMudanca(ev);
+  vivo.ultimoEvento = chave;
   render();
   if (state.step === "auditoria") carregarAuditoria();
 }
 
+/** Aviso de troca feita por outra pessoa, com destaque na posição e atalho para a escala. */
+function avisarMudanca(ev) {
+  const foraDaEscala = state.step !== "escala";
+  toast(`${ev.usuario} · ${ev.descricao}`, "warn", foraDaEscala ? { rotulo: "Ver escala", fn: () => irPara("escala") } : null);
+  const d = ev.detalhes;
+  if (d?.data) {
+    const k = chavePos(d.data, d.turno, d.cargo);
+    state.recentes.add(k);
+    setTimeout(() => state.recentes.delete(k), 6000);
+  }
+  // ADM com uma revisão aberta: a revisão foi copiada antes desta troca.
+  if (ehAdmin() && state.rascunho && ev.tipo === "PLANTAO_ALTERADO") state.finalMudou = ev;
+}
+
 function iniciarAtualizacaoAutomatica() {
+  // Continua rodando com a aba em segundo plano (o navegador só espaça as consultas).
   setInterval(verificarAtualizacoes, INTERVALO_ATUALIZACAO);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) verificarAtualizacoes(); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { vivo.ocultaDesde = Date.now(); return; }
+    const longe = vivo.ocultaDesde && Date.now() - vivo.ocultaDesde > RECARREGAR_APOS_OCULTA;
+    vivo.ocultaDesde = null;
+    // Aba que ficou muito tempo escondida (ou "adormecida" pelo navegador) volta recarregada.
+    if (longe && !ocupado()) location.reload();
+    else verificarAtualizacoes();
+  });
+  window.addEventListener("focus", verificarAtualizacoes);
+  window.addEventListener("online", verificarAtualizacoes);
+  window.addEventListener("pageshow", (e) => { if (e.persisted) location.reload(); }); // voltou pelo histórico
   verificarAtualizacoes();
 }
 
@@ -1246,7 +1288,7 @@ window.addEventListener("hashchange", () => irPara(location.hash.slice(1)));
     if (!state.usuario) return;
   }
   const inicial = location.hash.slice(1)
-    || (!state.periodo ? "periodo" : !prontoParaGerar() ? "equipe" : state.escala && !state.rascunho ? "escala" : "revisao");
+    || (!state.periodo ? "periodo" : !prontoParaGerar() ? "equipe" : state.escala ? "escala" : "revisao");
   irPara(inicial);
   iniciarAtualizacaoAutomatica();
 })();

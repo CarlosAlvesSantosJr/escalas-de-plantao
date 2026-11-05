@@ -274,7 +274,9 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
         ultima = auditoria.ultimo(EVENTOS_DA_ESCALA)
         if ultima:  # o IP fica só na auditoria do ADM
             ultima = {k: val for k, val in ultima.items() if k != "ip"}
-        return jsonify(versao=v, ultima=ultima)
+        # `usuario`: dono da sessão. Se outra pessoa entrar no mesmo navegador, o cookie
+        # muda para todas as abas; a tela compara e recarrega com o perfil certo.
+        return jsonify(versao=v, ultima=ultima, usuario=g.usuario.nome)
 
     # --- persistência -----------------------------------------------------
 

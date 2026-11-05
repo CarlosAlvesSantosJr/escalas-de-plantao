@@ -66,7 +66,9 @@ Os conflitos com as regras, o equilíbrio, a contagem de plantões de cada pesso
   </tr>
 </table>
 
-- **Tempo real:** cada tela consulta o servidor a cada 4 segundos. Quando alguém troca um plantão, as outras pessoas veem a mudança, com um aviso de quem trocou e um destaque piscando na posição. Se duas pessoas tentarem trocar a mesma posição ao mesmo tempo, a segunda recebe um aviso em vez de sobrescrever a troca da primeira.
+- **Tempo real:** cada tela consulta o servidor a cada 3 segundos e se atualiza sozinha quando alguém troca um plantão, com um aviso de quem trocou e um destaque piscando na posição. Isso vale também com a aba em segundo plano; uma aba que ficou mais de 2 minutos escondida ou "adormecida" pelo navegador é recarregada ao voltar. Se duas pessoas tentarem trocar a mesma posição ao mesmo tempo, a segunda recebe um aviso em vez de sobrescrever a troca da primeira.
+- **Uma pessoa por navegador:** a sessão vale para o navegador inteiro. Se outra pessoa entrar no mesmo navegador, as abas abertas recarregam com o nome dela. Para testar dois usuários no mesmo computador, use uma janela anônima ou outro navegador para o segundo.
+- **ADM com revisão aberta:** se um usuário trocar um plantão da escala confirmada enquanto o ADM revisa uma cópia, aparece um aviso na Revisão, porque confirmar a revisão substituiria essa troca.
 - **Nomes das funções:** na tela, no PDF e na auditoria, as colunas são **Enfermagem** e **Socorrista**.
 - **Auditoria** (só ADM): entradas, saídas, tentativas de acesso falhas e cada troca de plantão, no formato "Qua 02/12 DIA · Socorrista: DIEGO → BRUNO", com usuário, data, hora e IP. Dá para filtrar por pessoa ou por tipo e exportar em CSV.
 

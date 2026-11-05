@@ -280,7 +280,9 @@ def test_usuario_nao_ve_conflitos_distribuicao_nem_ip(client, tmp_path):
         assert all(set(s) == {"id", "nome", "cargo", "cor"} for s in escala["estatisticas"])
     cands = bia.get("/api/escala/candidatos", query_string=posicao).get_json()
     assert cands and all(c["total"] is None for c in cands)
-    assert "ip" not in bia.get("/api/versao").get_json()["ultima"]
+    versao = bia.get("/api/versao").get_json()
+    assert "ip" not in versao["ultima"]
+    assert versao["usuario"] == "Bruna"  # a tela compara com quem ela acha que está logado
 
 
 def test_alteracao_simultanea_nao_sobrescreve(client, tmp_path):
