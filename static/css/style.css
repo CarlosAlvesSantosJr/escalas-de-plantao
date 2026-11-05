@@ -596,3 +596,19 @@ tr.is-weekend td:first-child { color: #3B6FD8; font-weight: 600; }
 .audit-tipo--falha { background: var(--red-50); color: var(--red-700); }
 .audit-tipo--admin { background: var(--green-50); color: var(--green); }
 .audit-vazio { padding: 40px 20px; text-align: center; color: var(--ink-3); }
+
+/* ---------- Abas: escala atual / do mês seguinte ---------- */
+.meses { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+.mes {
+  display: grid; gap: 2px; text-align: left; min-width: 210px; padding: 12px 16px; cursor: pointer;
+  background: var(--surface); border: 2px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow);
+}
+.mes:hover:not(:disabled) { border-color: var(--ink-3); }
+.mes[aria-selected="true"] { border-color: var(--red); box-shadow: 0 0 0 4px var(--red-50); }
+.mes__papel { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.mes[aria-selected="true"] .mes__papel { color: var(--red); }
+.mes__nome { font-size: 1.05rem; font-weight: 700; color: var(--ink); }
+.mes.is-vazio { cursor: not-allowed; opacity: .6; box-shadow: none; border-style: dashed; }
+.mes.is-vazio .mes__nome { font-weight: 500; color: var(--ink-3); font-size: .92rem; }
+@media (max-width: 640px) { .mes { flex: 1 1 140px; min-width: 0; padding: 10px 12px; } }
+@media print { .meses { display: none !important; } }

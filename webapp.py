@@ -8,6 +8,7 @@ Toda alteração na escala confirmada vai para a auditoria.
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import os
@@ -141,6 +142,17 @@ def _segredo(diretorio: Path) -> str:
     return arquivo.read_text(encoding="utf-8").strip()
 
 
+def _versao_da_tela() -> str:
+    """Impressão digital dos arquivos da tela. Muda a cada versão nova publicada:
+    as telas abertas percebem e recarregam sozinhas (não ficam com o JS antigo)."""
+    h = hashlib.sha1()
+    for nome in ("index.html", "login.html", "js/app.js", "js/login.js", "css/style.css"):
+        arquivo = BASE_DIR / "static" / nome
+        if arquivo.exists():
+            h.update(arquivo.read_bytes())
+    return h.hexdigest()[:12]
+
+
 def _ligado(var: str) -> bool:
     return os.environ.get(var, "").lower() in ("1", "true", "sim", "yes")
 
@@ -168,6 +180,19 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
         # Atrás do Ingress: usa o IP real do cliente e o esquema (https) originais.
         from werkzeug.middleware.proxy_fix import ProxyFix
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+    app.config.setdefault("HOJE", date.today)  # trocado nos testes
+    versao_tela = _versao_da_tela()
+
+    def hoje() -> date:
+        return app.config["HOJE"]()
+
+    def pagina(nome: str) -> Response:
+        """Serve a página com os arquivos marcados pela versão (evita cache de JS/CSS antigos)."""
+        html = (BASE_DIR / "static" / nome).read_text(encoding="utf-8")
+        for ref in ("css/style.css", "js/app.js", "js/login.js"):
+            html = html.replace(f'"{ref}"', f'"{ref}?v={versao_tela}"')
+        return Response(html, mimetype="text/html")
 
     repo = RepositorioJSON(caminho_dados)
     cadastro = CadastroUsuarios(caminho_usuarios)
@@ -220,7 +245,7 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
     def pagina_login():
         if session.get("usuario") and cadastro.buscar(session["usuario"]):
             return redirect("/")
-        return app.send_static_file("login.html")
+        return pagina("login.html")
 
     @app.post("/api/login")
     def login():
@@ -276,7 +301,8 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
             ultima = {k: val for k, val in ultima.items() if k != "ip"}
         # `usuario`: dono da sessão. Se outra pessoa entrar no mesmo navegador, o cookie
         # muda para todas as abas; a tela compara e recarrega com o perfil certo.
-        return jsonify(versao=v, ultima=ultima, usuario=g.usuario.nome)
+        # `app`: versão da tela; se mudou (nova versão publicada), a página recarrega.
+        return jsonify(versao=v, ultima=ultima, usuario=g.usuario.nome, app=versao_tela)
 
     # --- persistência -----------------------------------------------------
 
@@ -308,7 +334,7 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
 
     @app.get("/")
     def index():
-        return app.send_static_file("index.html")
+        return pagina("index.html")
 
     @app.get("/saude")
     def saude():
@@ -319,9 +345,11 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
         admin = g.usuario.admin
         with repo.lock:
             estado = repo.carregar()
+            padrao = estado.escala_padrao(hoje())
             return jsonify(**estado_json(estado, completo=admin),
                            rascunho=escala_json(estado, estado.rascunho) if admin else None,
-                           escala=escala_json(estado, estado.escala, completo=admin))
+                           escala=escala_json(estado, padrao, completo=admin),
+                           escalas=escalas_json(estado))
 
     @app.put("/api/periodo")
     @transacao
@@ -485,16 +513,34 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
 
     # --- escala final ----------------------------------------------------
 
+    PAPEIS_USUARIO = ("atual", "seguinte")  # o perfil USUARIO vê a escala atual e a do mês seguinte
+
+    def visiveis(estado: EstadoApp) -> list[Escala]:
+        papeis = estado.classificar(hoje())
+        return [e for e in estado.escalas
+                if g.usuario.admin or papeis[e.periodo.inicio] in PAPEIS_USUARIO]
+
+    def escalas_json(estado: EstadoApp) -> list[dict]:
+        """Escalas confirmadas que esta pessoa pode ver, com o papel de cada uma."""
+        papeis = estado.classificar(hoje())
+        return [{**escala_json(estado, e, completo=g.usuario.admin), "papel": papeis[e.periodo.inicio]}
+                for e in visiveis(estado)]
+
     def exigir_escala(estado: EstadoApp) -> Escala:
-        if not estado.escala:
-            raise ErroDeNegocio("Nenhuma escala confirmada. Revise e confirme a escala primeiro.", 404)
-        return estado.escala
+        """A escala confirmada pedida em ?inicio=AAAA-MM-DD (sem ele, a atual ou a do mês seguinte)."""
+        if inicio := request.args.get("inicio"):
+            escolhida = estado.escala_de(_parse_data(inicio))
+        else:
+            escolhida = estado.escala_padrao(hoje())
+        if escolhida is None or escolhida not in visiveis(estado):
+            raise ErroDeNegocio("Nenhuma escala confirmada para este período.", 404)
+        return escolhida
 
     @app.get("/api/escala")
     def obter_escala():
         with repo.lock:
             estado = repo.carregar()
-            return jsonify(escala_json(estado, estado.escala, completo=g.usuario.admin))
+            return jsonify(escala_json(estado, exigir_escala(estado), completo=g.usuario.admin))
 
     @app.patch("/api/escala")
     @transacao
@@ -503,7 +549,7 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
         final = exigir_escala(estado)
         mudancas = aplicar_alteracoes(estado, final, request.get_json(force=True), conferir=True)
         for m in mudancas:
-            registrar("PLANTAO_ALTERADO", m.pop("rotulo"), **m)
+            registrar("PLANTAO_ALTERADO", m.pop("rotulo"), escala=final.periodo.inicio.isoformat(), **m)
         return jsonify(escala_json(estado, final, completo=g.usuario.admin))
 
     @app.get("/api/escala/candidatos")
@@ -518,10 +564,13 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
         """Confirma o rascunho em revisão como a escala final."""
         rascunho = exigir_rascunho(estado)
         rascunho.confirmada_em = datetime.now()
-        estado.escala, estado.rascunho = rascunho, None
+        substituidas = estado.publicar(rascunho)  # a de mesmo período é trocada; as outras ficam
+        estado.rascunho = None
+        extra = (" (substituiu a versão anterior)" if substituidas else "")
         registrar("ESCALA_CONFIRMADA", f"Confirmou a escala de {rascunho.periodo.inicio:%d/%m/%Y} a "
-                                       f"{rascunho.periodo.fim:%d/%m/%Y}")
-        return jsonify(escala_json(estado, estado.escala))
+                                       f"{rascunho.periodo.fim:%d/%m/%Y}{extra}",
+                  escala=rascunho.periodo.inicio.isoformat())
+        return jsonify(escala_json(estado, rascunho))
 
     @app.post("/api/escala/editar")
     @transacao

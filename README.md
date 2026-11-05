@@ -11,7 +11,7 @@ Monta duplas de enfermagem e socorrista para cada turno, respeita folgas, féria
 ![Flask](https://img.shields.io/badge/Flask-API-000000?logo=flask&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-pronto-2496ED?logo=docker&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-pronto-326CE5?logo=kubernetes&logoColor=white)
-![Testes](https://img.shields.io/badge/testes-40%20passando-1E8E5A)
+![Testes](https://img.shields.io/badge/testes-45%20passando-1E8E5A)
 ![Licença](https://img.shields.io/badge/licença-MIT-C8102E)
 
 [Kubernetes](k8s/README.md) · [Funcionalidades](#-funcionalidades) · [Acesso e perfis](#-acesso-perfis-e-auditoria) · [Algoritmo](#-como-o-algoritmo-decide) · [Arquitetura](#-arquitetura) · [Estudo de caso](docs/PORTFOLIO.md)
@@ -36,7 +36,7 @@ Montar essa escala à mão significa cruzar a disponibilidade de cada pessoa, tu
 | **2. Equipe** | Cadastro de profissionais de enfermagem e socorristas, com validação, busca e um alerta quando a equipe é pequena demais para garantir descanso. |
 | **3. Disponibilidade** | Calendário por pessoa com "pincel": **Indisponível**, **Preferencial** ou **Férias**. Clique ou arraste sobre os turnos; clique na data para o dia inteiro ou no dia da semana para todas as ocorrências. Salva sozinho. |
 | **4. Revisão** | Proposta automática que pode ser ajustada à mão: clique num nome, veja quem está livre (e o impedimento de quem não está), troque ou deixe vago. Conflitos com as regras aparecem na hora, com desfazer (Ctrl+Z). Nada vai para a escala final sem confirmação. |
-| **5. Escala** | Versão confirmada, com cores por profissional (ou por função), legenda que destaca os plantões de cada pessoa, indicadores e visão em calendário ou lista. Sai em PDF, imprime e exporta. Pode ser reaberta para edição. |
+| **5. Escala** | Versão confirmada, com cores por profissional (ou por função), legenda que destaca os plantões de cada pessoa, indicadores e visão em calendário ou lista. Sai em PDF, imprime e exporta. Pode ser reaberta para edição. Várias escalas ficam publicadas ao mesmo tempo, em abas: **Escala atual** e **Escala do mês seguinte** (o ADM vê também as anteriores). Confirmar um período novo não apaga os outros. |
 
 ## 🔐 Acesso, perfis e auditoria
 
@@ -67,6 +67,8 @@ Os conflitos com as regras, o equilíbrio, a contagem de plantões de cada pesso
 </table>
 
 - **Tempo real:** cada tela consulta o servidor a cada 3 segundos e se atualiza sozinha quando alguém troca um plantão, com um aviso de quem trocou e um destaque piscando na posição. Isso vale também com a aba em segundo plano; uma aba que ficou mais de 2 minutos escondida ou "adormecida" pelo navegador é recarregada ao voltar. Se duas pessoas tentarem trocar a mesma posição ao mesmo tempo, a segunda recebe um aviso em vez de sobrescrever a troca da primeira.
+- **Escala atual e do mês seguinte:** a equipe vê as duas, em abas, e pode trocar plantões em qualquer uma para se organizar com antecedência. A aba do mês seguinte aparece como "ainda não publicada" até o ADM confirmar a escala.
+- **Versão nova:** quando uma versão nova do sistema é publicada, as telas abertas recarregam sozinhas, sem ficar com a tela antiga.
 - **Uma pessoa por navegador:** a sessão vale para o navegador inteiro. Se outra pessoa entrar no mesmo navegador, as abas abertas recarregam com o nome dela. Para testar dois usuários no mesmo computador, use uma janela anônima ou outro navegador para o segundo.
 - **ADM com revisão aberta:** se um usuário trocar um plantão da escala confirmada enquanto o ADM revisa uma cópia, aparece um aviso na Revisão, porque confirmar a revisão substituiria essa troca.
 - **Nomes das funções:** na tela, no PDF e na auditoria, as colunas são **Enfermagem** e **Socorrista**.

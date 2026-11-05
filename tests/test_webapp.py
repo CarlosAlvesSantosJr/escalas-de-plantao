@@ -1,5 +1,6 @@
 import io
 import json
+from datetime import date
 
 import pytest
 
@@ -16,10 +17,14 @@ def _usuarios(pasta):
         caminho.write_text(json.dumps({"usuarios": [u.para_dict() for u in lista]}), encoding="utf-8")
 
 
-def _cliente(caminho_dados, nome="Marcia", matricula="11111"):
+HOJE = date(2026, 11, 3)  # "hoje" fixo: a escala de 02 a 04/11 é a atual
+
+
+def _cliente(caminho_dados, nome="Marcia", matricula="11111", hoje=HOJE):
     _usuarios(caminho_dados.parent)
     app = create_app(caminho_dados)
     app.testing = True
+    app.config["HOJE"] = lambda: hoje
     c = app.test_client()
     c.environ_base["HTTP_X_REQUESTED_WITH"] = "fetch"
     if nome:
@@ -306,3 +311,73 @@ def test_auditoria_em_csv(client):
 def test_logout_encerra_sessao(client):
     assert client.post("/api/logout").status_code == 204
     assert client.get("/api/estado").status_code == 401
+
+
+# --- várias escalas: atual e do mês seguinte ------------------------------
+
+def _confirmar(client, inicio, fim):
+    client.put("/api/periodo", json={"inicio": inicio, "fim": fim})
+    client.post("/api/rascunho")
+    return client.post("/api/escala").get_json()
+
+
+def test_escala_do_mes_seguinte_convive_com_a_atual(client, tmp_path):
+    _preparar(client)
+    _confirmar(client, "2026-11-02", "2026-11-04")
+    _confirmar(client, "2026-12-01", "2026-12-03")
+    _confirmar(client, "2026-10-01", "2026-10-03")  # anterior: só o ADM vê
+
+    estado = client.get("/api/estado").get_json()
+    assert [(e["periodo"]["inicio"], e["papel"]) for e in estado["escalas"]] == [
+        ("2026-10-01", "anterior"), ("2026-11-02", "atual"), ("2026-12-01", "seguinte")]
+    assert estado["escala"]["periodo"]["inicio"] == "2026-11-02"  # abre na atual
+
+    bruna = _cliente(tmp_path / "dados.json", "Bruna", "22222")
+    papeis = [e["papel"] for e in bruna.get("/api/estado").get_json()["escalas"]]
+    assert papeis == ["atual", "seguinte"]
+    assert bruna.get("/api/escala", query_string={"inicio": "2026-10-01"}).status_code == 404
+
+    # A troca vai para a escala do mês seguinte, sem mexer na atual.
+    dez = bruna.get("/api/escala", query_string={"inicio": "2026-12-01"}).get_json()
+    p = _plantao(dez, "2026-12-02", "DIA")
+    outro = next(s["id"] for s in dez["estatisticas"] if s["cargo"] == "MOTORISTA" and s["id"] != p["motorista"]["id"])
+    r = bruna.patch("/api/escala?inicio=2026-12-01", json=[{"data": "2026-12-02", "turno": "DIA", "cargo": "MOTORISTA",
+                                                           "funcionario_id": outro, "esperado": p["motorista"]["id"]}])
+    assert r.status_code == 200 and _plantao(r.get_json(), "2026-12-02", "DIA")["motorista"]["id"] == outro
+    assert bruna.patch("/api/escala?inicio=2026-12-01", json=[{"data": "2026-11-02", "turno": "DIA",
+                                                               "cargo": "MOTORISTA", "funcionario_id": None}]
+                       ).status_code == 400  # data fora da escala escolhida
+    ultima = client.get("/api/versao").get_json()["ultima"]
+    assert ultima["detalhes"]["escala"] == "2026-12-01"
+
+
+def test_confirmar_o_mesmo_periodo_substitui(client):
+    _preparar(client)
+    _confirmar(client, "2026-11-02", "2026-11-04")
+    _confirmar(client, "2026-11-02", "2026-11-04")
+    assert len(client.get("/api/estado").get_json()["escalas"]) == 1
+
+
+def test_sem_escala_atual_abre_a_do_mes_seguinte(tmp_path):
+    c = _cliente(tmp_path / "dados.json", hoje=date(2026, 11, 20))
+    _preparar(c)
+    _confirmar(c, "2026-12-01", "2026-12-03")
+    estado = c.get("/api/estado").get_json()
+    assert estado["escala"]["periodo"]["inicio"] == "2026-12-01"
+    assert estado["escalas"][0]["papel"] == "seguinte"
+
+
+def test_le_arquivo_com_uma_unica_escala(client, tmp_path):
+    _preparar(client)
+    final = _confirmar(client, "2026-11-02", "2026-11-04")
+    caminho = tmp_path / "dados.json"
+    dados = json.loads(caminho.read_text(encoding="utf-8"))
+    dados["escala"] = dados.pop("escalas")[0]  # como era gravado antes desta versão
+    caminho.write_text(json.dumps(dados), encoding="utf-8")
+    assert client.get("/api/escala").get_json()["plantoes"] == final["plantoes"]
+
+
+def test_paginas_marcam_a_versao_dos_arquivos(client):
+    html = client.get("/").data.decode("utf-8")
+    v = client.get("/api/versao").get_json()["app"]
+    assert f"js/app.js?v={v}" in html and f"css/style.css?v={v}" in html

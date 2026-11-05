@@ -218,10 +218,11 @@
         <div class="actions" id="escala-acoes">
           <button class="btn btn--ghost" data-acao="editar-final" data-admin hidden title="Abrir uma cópia para revisar com calma antes de substituir"><svg class="ic"><use href="#i-review"/></svg>Revisar</button>
           <button class="btn btn--ghost" id="btn-print"><svg class="ic"><use href="#i-print"/></svg>Imprimir</button>
-          <a class="btn btn--ghost" href="api/escala.json" data-admin hidden title="Arquivo para importar e editar depois, inclusive em outro computador"><svg class="ic"><use href="#i-file"/></svg>Exportar</a>
-          <a class="btn btn--primary" href="api/escala.pdf" data-admin hidden><svg class="ic"><use href="#i-download"/></svg>Baixar PDF</a>
+          <a class="btn btn--ghost" id="link-json" href="api/escala.json" data-admin hidden title="Arquivo para importar e editar depois, inclusive em outro computador"><svg class="ic"><use href="#i-file"/></svg>Exportar</a>
+          <a class="btn btn--primary" id="link-pdf" href="api/escala.pdf" data-admin hidden><svg class="ic"><use href="#i-download"/></svg>Baixar PDF</a>
         </div>
       </div>
+      <div class="meses" id="escala-meses" role="tablist" aria-label="Escolher a escala" hidden></div>
       <div class="banner banner--info" id="banner-rascunho" hidden>
         <svg class="ic"><use href="#i-review"/></svg>
         <span>Há uma revisão em andamento que ainda não foi confirmada. Esta página mostra a última versão confirmada.</span>

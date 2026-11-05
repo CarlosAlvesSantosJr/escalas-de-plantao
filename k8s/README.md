@@ -29,18 +29,18 @@ Há dois modos de implantação:
 
 ```bash
 kubectl config use-context docker-desktop
-docker build -t escala-plantao:1.1.1 .        # a mesma tag de newTag em tunel/kustomization.yaml
+docker build -t escala-plantao:1.2.0 .        # a mesma tag de newTag em tunel/kustomization.yaml
 kubectl apply -k k8s/tunel/
 kubectl -n escala-plantao logs deploy/cloudflared | grep trycloudflare   # endereço público
 ```
 
-**Para atualizar a versão, use sempre uma tag nova** (1.1.2, 1.2.0…). Se você
+**Para atualizar a versão, use sempre uma tag nova** (1.2.1, 1.3.0…). Se você
 reconstruir a imagem com a mesma tag, o nó do Kubernetes continua usando a
 cópia antiga que já guardou.
 
 ```bash
-docker build -t escala-plantao:1.2.0 .
-# troque newTag para "1.2.0" em k8s/tunel/kustomization.yaml
+docker build -t escala-plantao:1.3.0 .
+# troque newTag para "1.3.0" em k8s/tunel/kustomization.yaml
 kubectl apply -k k8s/tunel/
 ```
 
