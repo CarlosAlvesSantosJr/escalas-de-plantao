@@ -14,7 +14,7 @@ Monta duplas de enfermagem e socorrista para cada turno, respeita folgas, féria
 ![Testes](https://img.shields.io/badge/testes-40%20passando-1E8E5A)
 ![Licença](https://img.shields.io/badge/licença-MIT-C8102E)
 
-[Como rodar](#-como-rodar) · [Funcionalidades](#-funcionalidades) · [Acesso e perfis](#-acesso-perfis-e-auditoria) · [Algoritmo](#-como-o-algoritmo-decide) · [Arquitetura](#-arquitetura) · [Estudo de caso](docs/PORTFOLIO.md)
+[Kubernetes](k8s/README.md) · [Funcionalidades](#-funcionalidades) · [Acesso e perfis](#-acesso-perfis-e-auditoria) · [Algoritmo](#-como-o-algoritmo-decide) · [Arquitetura](#-arquitetura) · [Estudo de caso](docs/PORTFOLIO.md)
 
 </div>
 
@@ -108,44 +108,9 @@ Na Revisão ou na Escala, use **Importar** com o **PDF baixado do sistema** (ele
   </tr>
 </table>
 
-## 🚀 Como rodar
+## ☸️ Kubernetes
 
-### Com Docker (recomendado)
-
-Com o [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado:
-
-- **Windows:** dois cliques em `iniciar.bat` (para desligar, `parar.bat`)
-- **macOS / Linux:** `./iniciar.sh`
-
-Ou pelo terminal:
-
-```bash
-git clone https://github.com/CarlosAlvesSantosJr/escalas-de-plantao.git
-cd escalas-de-plantao
-docker compose up -d --build
-```
-
-Abra **http://localhost:8080**. Os dados (equipe, disponibilidade, revisão em andamento e escala final) ficam na pasta `./dados`; para fazer backup, basta copiá-la.
-
-> Guia passo a passo para quem não é da área de tecnologia: [docs/INSTALACAO.md](docs/INSTALACAO.md)
-
-### Sem Docker (desenvolvimento)
-
-```bash
-pip install -r requirements.txt
-
-python webapp.py      # versão web em http://localhost:5000
-python app.py         # versão desktop (Tkinter)
-python -m pytest      # testes
-```
-
-### No Kubernetes (acesso pela internet)
-
-Os manifests estão em [`k8s/`](k8s/): Deployment com 1 réplica, disco persistente, Secret com os usuários, Ingress com HTTPS do Let's Encrypt e pod sem root com sistema de arquivos somente leitura. O passo a passo está em **[k8s/README.md](k8s/README.md)**.
-
-```bash
-kubectl apply -k k8s/
-```
+Os manifests estão em [`k8s/`](k8s/): 1 réplica, disco persistente, usuários num Secret e pod sem root com sistema de arquivos somente leitura. Há dois modos: na nuvem ou numa VPS, com HTTPS do Let's Encrypt, ou no próprio PC com Cloudflare Tunnel. O passo a passo está em **[k8s/README.md](k8s/README.md)**.
 
 ## 🧠 Como o algoritmo decide
 
