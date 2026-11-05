@@ -56,7 +56,7 @@ Os conflitos com as regras, o equilíbrio, a contagem de plantões de cada pesso
   </tr>
   <tr>
     <td align="center"><sub>Login com nome e matrícula</sub></td>
-    <td align="center"><sub>Visão do usuário: troca de plantão, sem conflitos nem distribuição</sub></td>
+    <td align="center"><sub>Visão do usuário: abas da escala atual e do mês seguinte, troca de plantão, sem conflitos nem distribuição</sub></td>
   </tr>
   <tr>
     <td colspan="2"><img src="docs/img/auditoria.jpg" alt="Auditoria com entradas e trocas de plantão"></td>

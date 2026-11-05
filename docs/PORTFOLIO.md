@@ -57,6 +57,8 @@ A coordenação pode escalar alguém com impedimento quando a exceção foi comb
 
 ### O PDF para a equipe
 
+Ficam publicadas ao mesmo tempo a **escala atual** e a **do mês seguinte**, em abas, para a equipe combinar trocas com antecedência. Toda troca aparece para todos em poucos segundos e fica registrada na auditoria, que só a coordenação vê.
+
 Uma página por mês, com uma linha por dia: **DIA** à esquerda e **NOITE** à direita, cada um com **Enfermagem** e **Socorrista**. Cada pessoa tem a mesma cor da tela, para achar os próprios plantões de relance. O resumo de plantões por profissional fica só no sistema.
 
 O PDF também carrega os dados da escala embutidos. Assim, o mesmo arquivo que vai para o grupo da equipe serve para **importar** a escala de volta e editá-la, inclusive em outro computador.
