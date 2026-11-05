@@ -3,14 +3,34 @@ import json
 
 import pytest
 
+from escala.usuarios import Papel, novo_usuario
 from webapp import create_app
+
+
+def _usuarios(pasta):
+    """Cadastro de teste: um ADMIN e dois usuários comuns, na pasta dos dados."""
+    caminho = pasta / "usuarios.json"
+    if not caminho.exists():
+        lista = [novo_usuario("Márcia", "11111", Papel.ADMIN), novo_usuario("Bruna", "22222"),
+                 novo_usuario("Caio", "033333")]
+        caminho.write_text(json.dumps({"usuarios": [u.para_dict() for u in lista]}), encoding="utf-8")
+
+
+def _cliente(caminho_dados, nome="Marcia", matricula="11111"):
+    _usuarios(caminho_dados.parent)
+    app = create_app(caminho_dados)
+    app.testing = True
+    c = app.test_client()
+    c.environ_base["HTTP_X_REQUESTED_WITH"] = "fetch"
+    if nome:
+        r = c.post("/api/login", json={"nome": nome, "matricula": matricula})
+        assert r.status_code == 200, r.get_json()
+    return c
 
 
 @pytest.fixture
 def client(tmp_path):
-    app = create_app(tmp_path / "dados.json")
-    app.testing = True
-    return app.test_client()
+    return _cliente(tmp_path / "dados.json")
 
 
 def test_fluxo_completo(client):
@@ -57,7 +77,7 @@ def test_le_formato_legado(tmp_path):
                                                     "2026-10-01|NOITE": "DISPONIVEL"}}]}
     caminho = tmp_path / "dados.json"
     caminho.write_text(json.dumps(legado), encoding="utf-8")
-    client = create_app(caminho).test_client()
+    client = _cliente(caminho)
     f = client.get("/api/estado").get_json()["funcionarios"][0]
     assert f["cargo"] == "ENFERMEIRO" and f["id"]
     assert f["disponibilidade"] == {"2026-10-01|DIA": "INDISPONIVEL"}
@@ -107,7 +127,7 @@ def test_edicao_rejeita_cargo_errado(client):
     client.post("/api/rascunho")
     r = client.patch("/api/rascunho", json=[{"data": "2026-11-02", "turno": "DIA",
                                              "cargo": "ENFERMEIRO", "funcionario_id": ids["caio"]}])
-    assert r.status_code == 400 and "motorista" in r.get_json()["erro"]
+    assert r.status_code == 400 and "Socorrista" in r.get_json()["erro"]
 
 
 def test_mudar_periodo_descarta_rascunho_mas_mantem_final(client):
@@ -129,7 +149,7 @@ def test_exporta_e_importa_em_outra_instalacao(client, tmp_path, formato):
     final = client.post("/api/escala").get_json()
     arquivo = client.get(f"/api/escala.{formato}").data
 
-    outra = create_app(tmp_path / "outra.json").test_client()
+    outra = _cliente(tmp_path / "outra.json")
     outra.post("/api/funcionarios", json={"nome": "Ana", "cargo": "ENFERMEIRO"})
     r = outra.post("/api/escala/importar", data={"arquivo": (io.BytesIO(arquivo), f"escala.{formato}")},
                    content_type="multipart/form-data")
@@ -166,3 +186,121 @@ def test_profissional_removido_vira_conflito(client):
     r = client.get("/api/rascunho").get_json()
     assert r["plantoes"][0]["enfermeiro"]["id"] == alvo
     assert any(c["id"] == alvo and "equipe" in c["motivo"] for c in r["conflitos"])
+
+
+# --- login, perfis e auditoria ------------------------------------------
+
+def _escala_confirmada(client):
+    ids = _preparar(client)
+    client.post("/api/rascunho")
+    return ids, client.post("/api/escala").get_json()
+
+
+def test_sem_login_nao_acessa(tmp_path):
+    c = _cliente(tmp_path / "dados.json", nome=None)
+    assert c.get("/api/estado").status_code == 401
+    r = c.get("/")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/login")
+    assert c.get("/login").status_code == 200
+    assert c.get("/saude").status_code == 200
+
+
+def test_login_aceita_nome_sem_acento_e_recusa_matricula_errada(tmp_path):
+    c = _cliente(tmp_path / "dados.json", nome=None)
+    assert c.post("/api/login", json={"nome": "  marcia ", "matricula": "11111"}).get_json()["admin"] is True
+    c2 = _cliente(tmp_path / "dados.json", nome=None)
+    r = c2.post("/api/login", json={"nome": "Caio", "matricula": "33333"})  # sem o zero à esquerda
+    assert r.status_code == 401
+    assert c2.post("/api/login", json={"nome": "Caio", "matricula": "033333"}).get_json()["admin"] is False
+
+
+def test_login_bloqueia_apos_muitas_tentativas(tmp_path):
+    c = _cliente(tmp_path / "dados.json", nome=None)
+    for _ in range(5):
+        assert c.post("/api/login", json={"nome": "Bruna", "matricula": "1"}).status_code == 401
+    r = c.post("/api/login", json={"nome": "Bruna", "matricula": "22222"})
+    assert r.status_code == 429
+
+
+def test_exige_cabecalho_contra_csrf(tmp_path):
+    c = _cliente(tmp_path / "dados.json")
+    del c.environ_base["HTTP_X_REQUESTED_WITH"]
+    assert c.post("/api/funcionarios", json={"nome": "Ana", "cargo": "ENFERMEIRO"}).status_code == 403
+
+
+def test_usuario_so_altera_plantao_da_escala_confirmada(client, tmp_path):
+    ids, final = _escala_confirmada(client)
+    bia = _cliente(tmp_path / "dados.json", "bruna", "22222")
+
+    for metodo, url in [("post", "/api/funcionarios"), ("post", "/api/rascunho"), ("put", "/api/periodo"),
+                        ("post", "/api/escala"), ("get", "/api/escala.pdf"), ("get", "/api/escala.json"),
+                        ("post", "/api/escala/importar"), ("get", "/api/auditoria"),
+                        ("post", "/api/escala/editar")]:
+        assert getattr(bia, metodo)(url).status_code == 403, url
+
+    estado = bia.get("/api/estado").get_json()
+    assert estado["rascunho"] is None and estado["escala"]
+    assert all(f["disponibilidade"] == {} for f in estado["funcionarios"])
+
+    p = _plantao(final, "2026-11-03", "DIA")
+    outro = next(i for n, i in ids.items() if n in ("ana", "bia") and i != p["enfermeiro"]["id"])
+    posicao = {"data": "2026-11-03", "turno": "DIA", "cargo": "ENFERMEIRO"}
+    assert bia.get("/api/escala/candidatos", query_string=posicao).status_code == 200
+    r = bia.patch("/api/escala", json=[{**posicao, "funcionario_id": outro, "esperado": p["enfermeiro"]["id"]}])
+    assert r.status_code == 200
+    assert _plantao(r.get_json(), "2026-11-03", "DIA")["enfermeiro"]["id"] == outro
+
+    # O ADM vê na hora e a versão muda para as outras telas recarregarem.
+    assert _plantao(client.get("/api/escala").get_json(), "2026-11-03", "DIA")["enfermeiro"]["id"] == outro
+    ultima = client.get("/api/versao").get_json()["ultima"]
+    assert ultima["usuario"] == "Bruna" and ultima["tipo"] == "PLANTAO_ALTERADO"
+
+    eventos = client.get("/api/auditoria", query_string={"usuario": "BRUNA"}).get_json()["eventos"]
+    alteracao = next(e for e in eventos if e["tipo"] == "PLANTAO_ALTERADO")
+    assert alteracao["detalhes"]["antes"] == p["enfermeiro"]["nome"]
+    assert "→" in alteracao["descricao"] and "Enfermagem:" in alteracao["descricao"]
+    assert any(e["tipo"] == "LOGIN" for e in eventos)
+
+
+def test_usuario_nao_ve_conflitos_distribuicao_nem_ip(client, tmp_path):
+    ids, final = _escala_confirmada(client)
+    # Um ajuste do ADM que quebra regra: ANA de férias e escalada.
+    client.patch(f"/api/funcionarios/{ids['ana']}/disponibilidade",
+                 json=[{"data": "2026-11-02", "turno": "DIA", "status": "FERIAS"}])
+    posicao = {"data": "2026-11-02", "turno": "DIA", "cargo": "ENFERMEIRO"}
+    p = _plantao(final, "2026-11-02", "DIA")
+    client.patch("/api/escala", json=[{**posicao, "funcionario_id": ids["ana"], "esperado": p["enfermeiro"]["id"]}])
+
+    adm = client.get("/api/escala").get_json()
+    assert adm["conflitos"] and all("total" in s for s in adm["estatisticas"])
+
+    bia = _cliente(tmp_path / "dados.json", "Bruna", "22222")
+    for escala in (bia.get("/api/escala").get_json(), bia.get("/api/estado").get_json()["escala"]):
+        assert escala["conflitos"] == []
+        assert all(set(s) == {"id", "nome", "cargo", "cor"} for s in escala["estatisticas"])
+    cands = bia.get("/api/escala/candidatos", query_string=posicao).get_json()
+    assert cands and all(c["total"] is None for c in cands)
+    assert "ip" not in bia.get("/api/versao").get_json()["ultima"]
+
+
+def test_alteracao_simultanea_nao_sobrescreve(client, tmp_path):
+    ids, final = _escala_confirmada(client)
+    p = _plantao(final, "2026-11-02", "NOITE")
+    posicao = {"data": "2026-11-02", "turno": "NOITE", "cargo": "MOTORISTA"}
+    bia = _cliente(tmp_path / "dados.json", "Bruna", "22222")
+    caio = _cliente(tmp_path / "dados.json", "Caio", "033333")
+    viu = p["motorista"]["id"]
+    assert bia.patch("/api/escala", json=[{**posicao, "funcionario_id": None, "esperado": viu}]).status_code == 200
+    r = caio.patch("/api/escala", json=[{**posicao, "funcionario_id": ids["eva"], "esperado": viu}])
+    assert r.status_code == 409 and "outra pessoa" in r.get_json()["erro"]
+
+
+def test_auditoria_em_csv(client):
+    _escala_confirmada(client)
+    r = client.get("/api/auditoria.csv")
+    assert r.status_code == 200 and "ESCALA_CONFIRMADA" in r.data.decode("utf-8-sig")
+
+
+def test_logout_encerra_sessao(client):
+    assert client.post("/api/logout").status_code == 204
+    assert client.get("/api/estado").status_code == 401

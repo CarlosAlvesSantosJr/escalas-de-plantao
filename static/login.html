@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar · Escala de Plantão SAMU 192</title>
+  <meta name="theme-color" content="#0E1A2B">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="login-page">
+  <main class="login">
+    <section class="login__brand" aria-hidden="true">
+      <div class="login__brand-text">
+        <p class="hero__eyebrow">Serviço de Atendimento Móvel de Urgência</p>
+        <p class="login__brand-title">Escala de Plantão</p>
+      </div>
+    </section>
+
+    <section class="login__panel">
+      <form class="login__card" id="form-login" novalidate>
+        <div class="login__logo" role="img" aria-label="Logotipo do SAMU 192"></div>
+        <h1>Entrar</h1>
+        <p class="muted">Use seu nome e sua matrícula para acessar a escala.</p>
+
+        <div class="login__aviso" id="login-aviso" role="status" hidden></div>
+
+        <label class="field">
+          <span class="field__label">Nome</span>
+          <input name="nome" id="nome" autocomplete="username" autocapitalize="words" spellcheck="false"
+                 placeholder="Ex.: Maria" maxlength="60" required aria-describedby="login-erro">
+        </label>
+
+        <label class="field">
+          <span class="field__label">Matrícula</span>
+          <span class="login__senha">
+            <input name="matricula" id="matricula" type="password" inputmode="numeric" autocomplete="current-password"
+                   placeholder="Somente números" maxlength="20" required aria-describedby="login-erro">
+            <button type="button" class="login__olho" id="mostrar" aria-label="Mostrar matrícula" aria-pressed="false">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </span>
+        </label>
+
+        <p class="login__erro" id="login-erro" role="alert"></p>
+
+        <button type="submit" class="btn btn--primary login__btn" id="entrar">
+          <span class="login__spinner" aria-hidden="true"></span>
+          <span id="entrar-texto">Entrar</span>
+        </button>
+
+        <p class="login__ajuda muted small">Esqueceu a matrícula ou não consegue entrar? Fale com a coordenação.</p>
+      </form>
+    </section>
+  </main>
+  <script src="js/login.js" type="module"></script>
+</body>
+</html>

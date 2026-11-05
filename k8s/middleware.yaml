@@ -1,0 +1,10 @@
+# Traefik: redireciona HTTP → HTTPS. (Usando outro Ingress Controller,
+# remova este arquivo do kustomization.yaml e a anotação em ingress.yaml.)
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: https
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true

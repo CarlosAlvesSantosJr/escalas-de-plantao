@@ -1,0 +1,20 @@
+# Base comum: aplicação, disco, serviço e segredos. Não aplique sozinha;
+# use k8s/ (Ingress + HTTPS, para nuvem/VPS) ou k8s/tunel/ (Cloudflare Tunnel).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: escala-plantao
+
+resources:
+  - namespace.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Segredos gerados a partir de arquivos locais que NÃO vão para o Git
+# (k8s/base/segredos/ está no .gitignore). Ver k8s/README.md, passo 3.
+secretGenerator:
+  - name: escala-segredos
+    files:
+      - usuarios.json=segredos/usuarios.json
+    envs:
+      - segredos/sessao.env

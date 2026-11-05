@@ -32,21 +32,29 @@
     <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></symbol>
     <symbol id="i-review" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8M8 12h5M8 16.5l2 2 4-4.5"/></symbol>
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 2.5h8l4.5 4.5v14.5H6z"/><path d="M14 2.5V7h4.5M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9.5 20.5H5a1.5 1.5 0 01-1.5-1.5V5A1.5 1.5 0 015 3.5h4.5M15.5 16.5L20 12l-4.5-4.5M20 12H9"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.5l8 3v6c0 4.8-3.4 8.6-8 10-4.6-1.4-8-5.2-8-10v-6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></symbol>
   </svg>
 
   <header class="hero">
+    <div class="userbar" id="userbar" hidden>
+      <span class="live" id="live" title="As alterações de outras pessoas aparecem automaticamente"><i></i><span id="live-texto">Ao vivo</span></span>
+      <span class="userbar__who"><span class="avatar" id="user-avatar" aria-hidden="true"></span><span><span id="user-nome"></span> <span class="userbar__papel" id="user-papel"></span></span></span>
+      <button class="btn" id="btn-auditoria" data-admin hidden><svg class="ic"><use href="#i-shield"/></svg>Auditoria</button>
+      <button class="btn" id="btn-sair"><svg class="ic"><use href="#i-logout"/></svg>Sair</button>
+    </div>
     <div class="hero__inner">
       <div class="hero__text">
         <p class="hero__eyebrow">Serviço de Atendimento Móvel de Urgência</p>
         <h1>Escala de Plantão</h1>
-        <p class="hero__sub">Monte a escala de enfermeiros e motoristas com descanso garantido e distribuição justa.</p>
+        <p class="hero__sub" id="hero-sub">Monte a escala de enfermagem e socorristas com descanso garantido e distribuição justa.</p>
         <div class="hero__chips" id="hero-chips"></div>
       </div>
     </div>
   </header>
 
-  <nav class="stepper" aria-label="Etapas">
+  <nav class="stepper" aria-label="Etapas" id="stepper" data-admin hidden>
     <ol class="stepper__list">
       <li><button class="step" data-step="periodo"><span class="step__num">1</span><span class="step__label">Período</span></button></li>
       <li><button class="step" data-step="equipe"><span class="step__num">2</span><span class="step__label">Equipe</span></button></li>
@@ -95,7 +103,7 @@
       <div class="view__head">
         <div>
           <h2>Equipe</h2>
-          <p class="muted">Cadastre quem pode ser escalado. Cada viatura sai com um(a) enfermeiro(a) e um(a) motorista.</p>
+          <p class="muted">Cadastre quem pode ser escalado. Cada viatura sai com um(a) profissional de enfermagem e um(a) socorrista.</p>
         </div>
         <button class="btn btn--ghost" data-goto="disponibilidade">Ir para disponibilidade <svg class="ic"><use href="#i-arrow"/></svg></button>
       </div>
@@ -111,8 +119,8 @@
             <fieldset class="field">
               <legend class="field__label">Função</legend>
               <div class="segmented">
-                <label><input type="radio" name="cargo" value="ENFERMEIRO" checked><span>Enfermeiro(a)</span></label>
-                <label><input type="radio" name="cargo" value="MOTORISTA"><span>Motorista</span></label>
+                <label><input type="radio" name="cargo" value="ENFERMEIRO" checked><span>Enfermagem</span></label>
+                <label><input type="radio" name="cargo" value="MOTORISTA"><span>Socorrista</span></label>
               </div>
             </fieldset>
             <div class="actions">
@@ -126,8 +134,8 @@
           <div class="toolbar">
             <div class="tabs" role="tablist" id="filtro-cargo">
               <button role="tab" class="tab" data-cargo="" aria-selected="true">Todos <span class="count" data-count=""></span></button>
-              <button role="tab" class="tab" data-cargo="ENFERMEIRO" aria-selected="false">Enfermeiros <span class="count" data-count="ENFERMEIRO"></span></button>
-              <button role="tab" class="tab" data-cargo="MOTORISTA" aria-selected="false">Motoristas <span class="count" data-count="MOTORISTA"></span></button>
+              <button role="tab" class="tab" data-cargo="ENFERMEIRO" aria-selected="false">Enfermagem <span class="count" data-count="ENFERMEIRO"></span></button>
+              <button role="tab" class="tab" data-cargo="MOTORISTA" aria-selected="false">Socorristas <span class="count" data-count="MOTORISTA"></span></button>
             </div>
             <label class="search">
               <svg class="ic"><use href="#i-search"/></svg>
@@ -207,10 +215,10 @@
           <p class="muted" id="escala-sub">A versão confirmada, pronta para imprimir e distribuir.</p>
         </div>
         <div class="actions" id="escala-acoes">
-          <button class="btn btn--ghost" data-acao="editar-final"><svg class="ic"><use href="#i-edit"/></svg>Editar</button>
+          <button class="btn btn--ghost" data-acao="editar-final" data-admin hidden title="Abrir uma cópia para revisar com calma antes de substituir"><svg class="ic"><use href="#i-review"/></svg>Revisar</button>
           <button class="btn btn--ghost" id="btn-print"><svg class="ic"><use href="#i-print"/></svg>Imprimir</button>
-          <a class="btn btn--ghost" href="api/escala.json" title="Arquivo para importar e editar depois, inclusive em outro computador"><svg class="ic"><use href="#i-file"/></svg>Exportar</a>
-          <a class="btn btn--primary" href="api/escala.pdf"><svg class="ic"><use href="#i-download"/></svg>Baixar PDF</a>
+          <a class="btn btn--ghost" href="api/escala.json" data-admin hidden title="Arquivo para importar e editar depois, inclusive em outro computador"><svg class="ic"><use href="#i-file"/></svg>Exportar</a>
+          <a class="btn btn--primary" href="api/escala.pdf" data-admin hidden><svg class="ic"><use href="#i-download"/></svg>Baixar PDF</a>
         </div>
       </div>
       <div class="banner banner--info" id="banner-rascunho" hidden>
@@ -221,13 +229,52 @@
       <div id="escala-vazia" class="empty" hidden>
         <svg class="ic ic--xl"><use href="#i-ambulance"/></svg>
         <h3>Nenhuma escala confirmada ainda</h3>
-        <p class="muted">Revise a proposta e clique em <strong>Confirmar escala</strong>, ou importe uma escala salva antes.</p>
-        <div class="actions actions--center">
+        <p class="muted" id="escala-vazia-texto">Revise a proposta e clique em <strong>Confirmar escala</strong>, ou importe uma escala salva antes.</p>
+        <div class="actions actions--center" data-admin hidden>
           <button class="btn btn--ghost" data-importar><svg class="ic"><use href="#i-upload"/></svg>Importar escala</button>
           <button class="btn btn--primary" data-goto="revisao">Ir para a revisão <svg class="ic"><use href="#i-arrow"/></svg></button>
         </div>
       </div>
       <div class="painel" id="escala-painel" hidden></div>
+    </section>
+
+    <!-- AUDITORIA (somente ADM) -->
+    <section class="view" id="view-auditoria" hidden>
+      <div class="view__head">
+        <div>
+          <h2>Auditoria</h2>
+          <p class="muted">Quem entrou no sistema e quem alterou a escala, do mais recente para o mais antigo.</p>
+        </div>
+        <div class="actions">
+          <a class="btn btn--ghost" id="audit-csv" href="api/auditoria.csv"><svg class="ic"><use href="#i-download"/></svg>Exportar CSV</a>
+          <button class="btn btn--primary" data-goto="escala">Voltar à escala <svg class="ic"><use href="#i-arrow"/></svg></button>
+        </div>
+      </div>
+      <div class="card card--flush">
+        <form class="audit-filtros" id="audit-filtros">
+          <label class="field">
+            <span class="field__label">Usuário</span>
+            <select name="usuario" id="audit-usuario"><option value="">Todos</option></select>
+          </label>
+          <label class="field">
+            <span class="field__label">Tipo de evento</span>
+            <select name="categoria" id="audit-categoria">
+              <option value="">Todos</option>
+              <option value="plantao" selected>Alterações de plantão</option>
+              <option value="acesso">Entradas e saídas</option>
+              <option value="falha">Tentativas de acesso falhas</option>
+              <option value="admin">Ações do administrador</option>
+            </select>
+          </label>
+          <span class="muted small" id="audit-total" aria-live="polite"></span>
+        </form>
+        <div class="table-wrap">
+          <table class="audit-tabela">
+            <thead><tr><th>Quando</th><th>Usuário</th><th>Evento</th><th>Descrição</th><th>IP</th></tr></thead>
+            <tbody id="audit-linhas"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
   </main>
 

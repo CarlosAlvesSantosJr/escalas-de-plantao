@@ -151,7 +151,7 @@ footer a { color: #FFB48A; }
     <div>
       <p class="eyebrow">Estudo de caso · Projeto independente</p>
       <h1>Escala de Plantão <span>SAMU 192</span></h1>
-      <p class="cover__lead">Um gerador automático de escalas para as equipes de ambulância do SAMU: monta duplas de enfermeiro(a) e motorista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa. A coordenação revisa e ajusta a proposta antes de publicar.</p>
+      <p class="cover__lead">Um gerador automático de escalas para as equipes de ambulância do SAMU: monta duplas de enfermagem e socorrista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa. A coordenação revisa e ajusta a proposta antes de publicar.</p>
       <dl class="meta">
         <div><dt>Autor</dt><dd>Carlos Alves Santos Jr</dd></div>
         <div><dt>Papel</dt><dd>Produto, backend, frontend e UX</dd></div>
@@ -170,7 +170,7 @@ footer a { color: #FFB48A; }
       <h2 id="contexto">Uma viatura não pode sair sem equipe</h2>
     </div>
     <div class="stack prose">
-      <p>O SAMU 192 funciona 24 horas por dia. Em cada base, o dia é dividido em dois turnos, <strong>DIA</strong> e <strong>NOITE</strong>, e cada turno precisa de uma equipe completa na viatura: um(a) enfermeiro(a) e um(a) motorista. Num mês de 31 dias são 62 turnos e 124 posições a preencher.</p>
+      <p>O SAMU 192 funciona 24 horas por dia. Em cada base, o dia é dividido em dois turnos, <strong>DIA</strong> e <strong>NOITE</strong>, e cada turno precisa de uma equipe completa na viatura: um(a) profissional de enfermagem e um(a) socorrista. Num mês de 31 dias são 62 turnos e 124 posições a preencher.</p>
       <p>Quem coordena a escala precisa encaixar a vida real da equipe nesse quadro: folgas pedidas, férias, outros vínculos de trabalho, preferências de turno. E precisa fazer isso sem deixar ninguém exausto, porque uma equipe cansada atende pior uma emergência.</p>
     </div>
     <div class="pains">
@@ -207,7 +207,7 @@ footer a { color: #FFB48A; }
           <p>Define o ciclo com atalhos como "Próximo mês" e cadastra os profissionais por função. O painel avisa quando a equipe é pequena demais para garantir descanso.</p>
         </div>
         <figure>
-          <div class="shot"><img src="img/equipe.jpg" alt="Tela de cadastro da equipe com lista de enfermeiros e motoristas" loading="lazy" width="1400" height="1000"></div>
+          <div class="shot"><img src="img/equipe.jpg" alt="Tela de cadastro da equipe com lista de enfermagem e socorristas" loading="lazy" width="1400" height="1000"></div>
           <figcaption>Cadastro da equipe, com validação no próprio campo e busca.</figcaption>
         </figure>
       </div>
@@ -230,7 +230,7 @@ footer a { color: #FFB48A; }
         </div>
         <figure>
           <div class="shot"><img src="img/revisao.jpg" alt="Revisão da escala com a janela de troca aberta, listando quem pode assumir e quem tem impedimento" loading="lazy" width="1400" height="1000"></div>
-          <figcaption>Troca de condutor: livres em cima, impedidos embaixo com o motivo.</figcaption>
+          <figcaption>Troca de socorrista: livres em cima, impedidos embaixo com o motivo.</figcaption>
         </figure>
       </div>
       <div class="step">
@@ -248,7 +248,7 @@ footer a { color: #FFB48A; }
         <div>
           <div class="step__n">PDF</div>
           <h3>Para o grupo da equipe</h3>
-          <p>Uma linha por dia, com as colunas Enfermagem e Condutor em cada turno. Os fins de semana aparecem em destaque e cada nome mantém a cor da tela.</p>
+          <p>Uma linha por dia, com as colunas Enfermagem e Socorrista em cada turno. Os fins de semana aparecem em destaque e cada nome mantém a cor da tela.</p>
         </div>
         <figure>
           <div class="shot"><img src="img/pdf.jpg" alt="PDF da escala com os turnos DIA e NOITE lado a lado" loading="lazy" width="992" height="1403"></div>
@@ -268,7 +268,7 @@ footer a { color: #FFB48A; }
 <pre class="mermaid">
 flowchart TD
     A([Coordenação abre o sistema]) --> B["1. Define o período"]
-    B --> C["2. Cadastra enfermeiros e motoristas"]
+    B --> C["2. Cadastra enfermagem e socorristas"]
     C --> D["3. Marca indisponível, preferencial e férias"]
     D --> E["4. Revisão: o sistema propõe a escala"]
     E --> F{"Vagas ou conflitos?"}
@@ -294,7 +294,7 @@ flowchart TD
 <pre class="mermaid">
 flowchart TD
     S([Para cada dia do período]) --> T["Para cada turno: DIA, depois NOITE"]
-    T --> C["Para cada função: enfermeiro(a) e motorista"]
+    T --> C["Para cada função: enfermagem e socorrista"]
     C --> P["Avalia cada profissional da função"]
     P --> R1{"Indisponível ou de férias?"}
     R1 -- Sim --> X["Descarta"]
@@ -366,11 +366,11 @@ flowchart LR
     <div class="section-head">
       <span class="kicker">Resultados</span>
       <h2 id="resultados">Medido com dados reais</h2>
-      <p class="muted prose">Comparação entre o algoritmo original e o novo, rodando sobre a disponibilidade real de uma equipe de 5 enfermeiros e 5 motoristas em outubro de 2026 (dados anonimizados).</p>
+      <p class="muted prose">Comparação entre o algoritmo original e o novo, rodando sobre a disponibilidade real de uma equipe de 5 profissionais de enfermagem e 5 socorristas em outubro de 2026 (dados anonimizados).</p>
     </div>
     <div class="results">
       <div class="result is-good"><b>100%</b><span>das 124 posições do mês preenchidas</span></div>
-      <div class="result is-good"><b>5 <small>→</small> 3</b><span>diferença máxima de plantões entre enfermeiros</span></div>
+      <div class="result is-good"><b>5 <small>→</small> 3</b><span>diferença máxima de plantões na enfermagem</span></div>
       <div class="result"><b>31</b><span>testes automatizados de regra e API</span></div>
       <div class="result"><b>&lt;1<small>s</small></b><span>para gerar a escala de um mês</span></div>
     </div>

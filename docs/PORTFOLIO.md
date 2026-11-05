@@ -1,7 +1,7 @@
 # Escala de Plantão · SAMU 192
 
 > Estudo de caso · Carlos Alves Santos Jr · 2026
-> Gerador automático de escalas para equipes de ambulância do SAMU: monta duplas de enfermeiro(a) e motorista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa. A coordenação revisa e ajusta a proposta antes de publicar.
+> Gerador automático de escalas para equipes de ambulância do SAMU: monta duplas de enfermagem e socorrista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa. A coordenação revisa e ajusta a proposta antes de publicar.
 
 **Papel:** produto, backend, frontend e UX
 **Stack:** Python 3.12 · Flask · Gunicorn · JavaScript (sem framework) · fpdf · Docker Compose · pytest · Tkinter
@@ -12,7 +12,7 @@
 
 ## 1. Contexto de uso
 
-O SAMU 192 funciona 24 horas por dia. Em cada base, o dia é dividido em dois turnos, **DIA** e **NOITE**, e cada turno precisa de uma equipe completa na viatura: **um(a) enfermeiro(a) e um(a) motorista**. Num mês de 31 dias são 62 turnos e 124 posições a preencher.
+O SAMU 192 funciona 24 horas por dia. Em cada base, o dia é dividido em dois turnos, **DIA** e **NOITE**, e cada turno precisa de uma equipe completa na viatura: **um(a) profissional de enfermagem e um(a) socorrista**. Num mês de 31 dias são 62 turnos e 124 posições a preencher.
 
 Quem coordena a escala precisa encaixar a vida real da equipe nesse quadro: folgas pedidas, férias, outros vínculos de trabalho, preferências de turno. E precisa fazer isso sem deixar ninguém exausto, porque uma equipe cansada atende pior uma emergência.
 
@@ -57,7 +57,7 @@ A coordenação pode escalar alguém com impedimento quando a exceção foi comb
 
 ### O PDF para a equipe
 
-Uma página por mês, com uma linha por dia: **DIA** à esquerda e **NOITE** à direita, cada um com **Enfermagem** e **Condutor**. Cada pessoa tem a mesma cor da tela, para achar os próprios plantões de relance. O resumo de plantões por profissional fica só no sistema.
+Uma página por mês, com uma linha por dia: **DIA** à esquerda e **NOITE** à direita, cada um com **Enfermagem** e **Socorrista**. Cada pessoa tem a mesma cor da tela, para achar os próprios plantões de relance. O resumo de plantões por profissional fica só no sistema.
 
 O PDF também carrega os dados da escala embutidos. Assim, o mesmo arquivo que vai para o grupo da equipe serve para **importar** a escala de volta e editá-la, inclusive em outro computador.
 
@@ -70,7 +70,7 @@ O PDF também carrega os dados da escala embutidos. Assim, o mesmo arquivo que v
 ```mermaid
 flowchart TD
     A([Coordenação abre o sistema]) --> B["1. Define o período"]
-    B --> C["2. Cadastra enfermeiros e motoristas"]
+    B --> C["2. Cadastra enfermagem e socorristas"]
     C --> D["3. Marca indisponível, preferencial e férias"]
     D --> E["4. Revisão: o sistema propõe a escala"]
     E --> F{"Vagas ou conflitos?"}
@@ -93,7 +93,7 @@ O gerador percorre o período em ordem, turno a turno e função a função. Pri
 ```mermaid
 flowchart TD
     S([Para cada dia do período]) --> T["Para cada turno: DIA, depois NOITE"]
-    T --> C["Para cada função: enfermeiro(a) e motorista"]
+    T --> C["Para cada função: enfermagem e socorrista"]
     C --> P["Avalia cada profissional da função"]
     P --> R1{"Indisponível ou de férias?"}
     R1 -- Sim --> X["Descarta"]
@@ -189,12 +189,12 @@ flowchart LR
 
 ## 6. Resultados
 
-Comparação entre o algoritmo original e o novo, rodando sobre a disponibilidade real de uma equipe de 5 enfermeiros e 5 motoristas em outubro de 2026 (dados anonimizados):
+Comparação entre o algoritmo original e o novo, rodando sobre a disponibilidade real de uma equipe de 5 profissionais de enfermagem e 5 socorristas em outubro de 2026 (dados anonimizados):
 
 | Métrica | Antes | Depois |
 |---|---|---|
 | Cobertura das 124 posições | 100% | 100% |
-| Diferença máxima de plantões entre enfermeiros | 5 (14 × 9) | **3** (14 × 11) |
+| Diferença máxima de plantões na enfermagem | 5 (14 × 9) | **3** (14 × 11) |
 | Preferência de turno | Quem marcava tudo ficava com quase todos os plantões | Um plantão de vantagem, sem quebrar a equidade |
 | Vagas evitáveis | Escolha gulosa, sem olhar o turno seguinte | Protege quem é o único disponível adiante |
 | Noites e fins de semana | Não considerados | Entram no desempate |
