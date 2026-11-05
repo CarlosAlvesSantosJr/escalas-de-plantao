@@ -13,9 +13,21 @@ class Cargo(str, Enum):
     ENFERMEIRO = "ENFERMEIRO"
     MOTORISTA = "MOTORISTA"
 
+    # O valor interno (ENFERMEIRO/MOTORISTA) é mantido por compatibilidade com
+    # os arquivos salvos; na tela, no PDF e nas mensagens aparecem os rótulos.
     @property
     def rotulo(self) -> str:
-        return "Enfermeiro(a)" if self is Cargo.ENFERMEIRO else "Motorista"
+        """Nome da função/coluna: Enfermagem ou Socorrista."""
+        return "Enfermagem" if self is Cargo.ENFERMEIRO else "Socorrista"
+
+    @property
+    def profissional(self) -> str:
+        """Uma pessoa da função, em minúsculas, para frases."""
+        return "profissional de enfermagem" if self is Cargo.ENFERMEIRO else "socorrista"
+
+    @property
+    def profissionais(self) -> str:
+        return "profissionais de enfermagem" if self is Cargo.ENFERMEIRO else "socorristas"
 
 
 class Turno(str, Enum):

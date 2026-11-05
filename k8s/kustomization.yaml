@@ -1,0 +1,17 @@
+# Nuvem ou VPS, com Ingress (Traefik) e HTTPS do Let's Encrypt:
+#   kubectl apply -k k8s/
+# Para rodar no próprio PC com Cloudflare Tunnel, use k8s/tunel/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: escala-plantao
+
+resources:
+  - base
+  - ingress.yaml
+  - middleware.yaml   # requer Traefik; remova se usar outro Ingress Controller
+
+# Imagem publicada num registry (ver k8s/README.md, passo 2).
+images:
+  - name: escala-plantao
+    newName: ghcr.io/SEU-USUARIO/escala-plantao
+    newTag: "1.0.0"

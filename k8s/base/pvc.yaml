@@ -1,0 +1,12 @@
+# Disco onde ficam a escala (dados_escala.json) e a auditoria (auditoria.jsonl).
+# Sobrevive a atualizações e reinícios do pod. Faça backup periódico (ver k8s/README.md).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: escala-dados
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName: standard   # descomente se o cluster não tiver uma classe padrão

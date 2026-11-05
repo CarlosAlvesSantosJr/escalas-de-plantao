@@ -1,7 +1,9 @@
 """Persistência em JSON.
 
 Lê o formato antigo (campo "tipo", sem "id", sem período) e grava o novo.
-Guarda também o rascunho em revisão e a última escala confirmada.
+Guarda também o rascunho em revisão e as escalas confirmadas (uma por
+período: o mês atual, o seguinte e as anteriores). Arquivos antigos, com uma
+única "escala", continuam sendo lidos.
 A gravação é atômica (arquivo temporário + rename) para não corromper os
 dados se o processo cair no meio da escrita.
 """
@@ -19,12 +21,46 @@ from .dominio import (Cargo, Escala, Funcionario, Periodo, Plantao, Status, Turn
                       normalizar_nome)
 
 
+MAX_ESCALAS = 12  # escalas confirmadas guardadas (as mais antigas saem)
+
+
 @dataclass
 class EstadoApp:
     funcionarios: list[Funcionario] = field(default_factory=list)
     periodo: Periodo | None = None
     rascunho: Escala | None = None   # em revisão, editável
-    escala: Escala | None = None     # última versão confirmada
+    escalas: list[Escala] = field(default_factory=list)  # confirmadas, por data de início
+
+    def publicar(self, nova: Escala) -> list[Escala]:
+        """Inclui a escala confirmada; as que têm período sobreposto são substituídas."""
+        substituidas = [e for e in self.escalas
+                        if e.periodo.inicio <= nova.periodo.fim and nova.periodo.inicio <= e.periodo.fim]
+        self.escalas = sorted([e for e in self.escalas if e not in substituidas] + [nova],
+                              key=lambda e: e.periodo.inicio)[-MAX_ESCALAS:]
+        return substituidas
+
+    def escala_de(self, inicio: date) -> Escala | None:
+        return next((e for e in self.escalas if e.periodo.inicio == inicio), None)
+
+    def classificar(self, hoje: date) -> dict[date, str]:
+        """Papel de cada escala em relação a hoje: atual, seguinte, futura ou anterior."""
+        atual = next((e for e in self.escalas if e.periodo.inicio <= hoje <= e.periodo.fim), None)
+        corte = atual.periodo.fim if atual else hoje
+        seguinte = next((e for e in self.escalas if e.periodo.inicio > corte), None)
+        papeis = {}
+        for e in self.escalas:
+            papeis[e.periodo.inicio] = ("atual" if e is atual else "seguinte" if e is seguinte
+                                        else "anterior" if e.periodo.fim < hoje else "futura")
+        return papeis
+
+    def escala_padrao(self, hoje: date) -> Escala | None:
+        """A que abre primeiro: a atual; sem ela, a do mês seguinte; sem ela, a mais recente."""
+        papeis = self.classificar(hoje)
+        for papel in ("atual", "seguinte"):
+            for e in self.escalas:
+                if papeis[e.periodo.inicio] == papel:
+                    return e
+        return self.escalas[-1] if self.escalas else None
 
     def funcionario(self, id_: str) -> Funcionario:
         for f in self.funcionarios:
@@ -126,12 +162,15 @@ class RepositorioJSON:
         with self.caminho.open(encoding="utf-8") as fp:
             dados = json.load(fp)
         funcionarios = [_funcionario_de_dict(i) for i in dados.get("funcionarios", [])]
-        escalas = {chave: escala_de_dict(dados[chave], funcionarios)[0] if dados.get(chave) else None
-                   for chave in ("rascunho", "escala")}
+        rascunho = escala_de_dict(dados["rascunho"], funcionarios)[0] if dados.get("rascunho") else None
+        # Formato atual: lista "escalas". Formato antigo: uma única "escala".
+        brutas = dados.get("escalas") or ([dados["escala"]] if dados.get("escala") else [])
+        escalas = sorted((escala_de_dict(d, funcionarios)[0] for d in brutas), key=lambda e: e.periodo.inicio)
         return EstadoApp(
             funcionarios=funcionarios,
             periodo=periodo_de_dict(dados["periodo"]) if dados.get("periodo") else None,
-            **escalas,
+            rascunho=rascunho,
+            escalas=escalas,
         )
 
     def salvar(self, estado: EstadoApp) -> None:
@@ -139,7 +178,7 @@ class RepositorioJSON:
             "periodo": periodo_para_dict(estado.periodo) if estado.periodo else None,
             "funcionarios": [_funcionario_para_dict(f) for f in estado.funcionarios],
             "rascunho": escala_para_dict(estado.rascunho) if estado.rascunho else None,
-            "escala": escala_para_dict(estado.escala) if estado.escala else None,
+            "escalas": [escala_para_dict(e) for e in estado.escalas],
         }
         self.caminho.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=self.caminho.parent, suffix=".tmp")

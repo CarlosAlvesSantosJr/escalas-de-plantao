@@ -118,7 +118,7 @@ def test_vaga_informa_motivo():
     funcs = [Funcionario("A", Cargo.ENFERMEIRO)]
     r = gerar_escala(funcs, periodo(1))
     motivos = {(v.turno, v.cargo): v.motivo for v in r.vagas}
-    assert "Nenhum motorista" in motivos[(Turno.DIA, Cargo.MOTORISTA)]
+    assert "Nenhum socorrista" in motivos[(Turno.DIA, Cargo.MOTORISTA)]
     assert "descanso" in motivos[(Turno.NOITE, Cargo.ENFERMEIRO)]
 
 

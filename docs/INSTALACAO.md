@@ -33,12 +33,18 @@ Tudo fica no arquivo `dados/dados_escala.json`, dentro da pasta do sistema: a eq
 ## Usando no dia a dia
 
 1. **Período:** escolha o mês da escala.
-2. **Equipe:** cadastre enfermeiros(as) e motoristas.
+2. **Equipe:** cadastre profissionais de enfermagem e socorristas.
 3. **Disponibilidade:** escolha o pincel (Indisponível, Preferencial, Férias) e clique nos turnos de cada pessoa. Dá para arrastar o mouse para marcar vários de uma vez. Clicar na data marca o dia todo.
 4. **Revisão:** o sistema monta uma proposta sozinho. Confira e, se precisar, **clique em qualquer nome** para trocar a pessoa ou deixar a vaga em aberto. A janela mostra quem está livre e por que os outros não estão (férias, já tem plantão no dia, saindo da noite...). Errou? Use **Desfazer** (ou Ctrl+Z). Quando estiver tudo certo, clique em **Confirmar escala**.
-5. **Escala:** é a versão final. Use **Baixar PDF** para mandar para a equipe ou **Imprimir**. Cada pessoa tem uma cor; clique num nome da legenda para destacar os plantões dela. Para mudar algo depois, clique em **Editar**.
+5. **Escala:** é a versão final. Use **Baixar PDF** para mandar para a equipe ou **Imprimir**. Cada pessoa tem uma cor; clique num nome da legenda para destacar os plantões dela. Para trocar alguém num plantão, clique no nome direto na escala. Para uma revisão maior, com calma, use **Revisar**.
 
-O PDF traz uma linha por dia, com o turno DIA de um lado e a NOITE do outro (colunas Enfermagem e Condutor). O resumo de plantões por pessoa fica só no sistema.
+**Entrar no sistema:** cada pessoa usa o próprio **nome e matrícula**. A coordenação (ADM) vê e faz tudo. Os demais usuários veem só a escala confirmada e podem trocar o profissional de um plantão; conflitos com as regras e a distribuição por profissional aparecem só para o ADM. Toda troca fica registrada em **Auditoria**, que só o ADM acessa.
+
+**Escala atual e do mês seguinte:** na tela da Escala há duas abas, **Escala atual** e **Escala do mês seguinte**. Assim a equipe pode combinar trocas com antecedência. Para publicar o mês seguinte, a coordenação define o período (por exemplo, 01/12 a 31/12), gera a proposta e confirma: a escala do mês atual continua publicada. Confirmar de novo o mesmo período substitui só aquela escala. Enquanto o mês seguinte não for confirmado, a aba aparece como "ainda não publicada".
+
+**Depois de uma atualização do sistema** as telas abertas recarregam sozinhas. Se alguém vir algo estranho (números como "NaN", nomes antigos), basta apertar F5. Para cadastrar quem pode entrar, veja "Criar os usuários" no [README](../README.md#-acesso-perfis-e-auditoria).
+
+O PDF traz uma linha por dia, com o turno DIA de um lado e a NOITE do outro (colunas Enfermagem e Socorrista). O resumo de plantões por pessoa fica só no sistema.
 
 ## Levar a escala para outro computador
 

@@ -4,11 +4,12 @@ services:
     image: escala-plantao-samu:latest
     container_name: escala-plantao
     # Acessível só neste computador. Para abrir pelo celular na mesma rede,
-    # troque por "8080:5000" (atenção: a aplicação não tem login).
+    # troque por "8080:5000". O acesso exige login (nome + matrícula).
     ports:
       - "127.0.0.1:8080:5000"
     volumes:
       # Os dados ficam na pasta ./dados do computador: sobrevivem a
       # atualizações do container e podem ser copiados como backup.
+      # Lá ficam também usuarios.json (gerado com usuarios_cli.py) e auditoria.jsonl.
       - ./dados:/data
     restart: unless-stopped

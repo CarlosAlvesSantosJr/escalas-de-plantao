@@ -102,7 +102,7 @@ def gerar_pdf(resultado: ResultadoEscala, dados: dict | None = None) -> bytes:
             pdf.set_fill_color(*TEXTO)
             pdf.set_font("Helvetica", "B", 9)
             pdf.cell(larg_nome, altura, "Enfermagem", fill=True)
-            pdf.cell(larg_nome, altura, "Condutor", fill=True)
+            pdf.cell(larg_nome, altura, "Socorrista", fill=True)
             pdf.set_font("Helvetica", "B", 10)
             pdf.set_xy(x + larg_nome * 2, y)
         pdf.set_xy(pdf.l_margin, y + altura * 2)

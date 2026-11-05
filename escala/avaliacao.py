@@ -117,7 +117,7 @@ def impedimentos(f: Funcionario, dia: date, turno: Turno, cargo: Cargo, agenda: 
     if f.id not in equipe_ids:
         motivos.append("Não faz mais parte da equipe")
     elif f.cargo is not cargo:
-        motivos.append(f"Cadastrado(a) como {f.cargo.rotulo.lower()}")
+        motivos.append(f"Cadastrado(a) em {f.cargo.rotulo}")
 
     status = f.status(dia, turno)
     if status is Status.FERIAS:
@@ -139,17 +139,16 @@ def impedimentos(f: Funcionario, dia: date, turno: Turno, cargo: Cargo, agenda: 
 def _motivo_vaga(funcionarios: list[Funcionario], dia: date, turno: Turno, cargo: Cargo,
                  agenda: Agenda, equipe_ids: set[str]) -> str:
     equipe = [f for f in funcionarios if f.cargo is cargo]
-    nome_cargo = cargo.value.lower()
     if not equipe:
-        return f"Nenhum {nome_cargo} cadastrado"
+        return f"Nenhum {cargo.profissional} cadastrado"
     disponiveis = [f for f in equipe if f.pode_trabalhar(dia, turno)]
     if not disponiveis:
-        return f"Todos os {nome_cargo}s indisponíveis ou de férias"
+        return f"Todos os {cargo.profissionais} indisponíveis ou de férias"
     livres = [f for f in disponiveis if not impedimentos(f, dia, turno, cargo, agenda, equipe_ids)]
     if not livres:
         return "Disponíveis já cumprem descanso obrigatório"
     n = len(livres)
-    return f"{n} {nome_cargo}{'s' if n > 1 else ''} pode{'m' if n > 1 else ''} cobrir este turno"
+    return f"{n} {cargo.profissionais if n > 1 else cargo.profissional} pode{'m' if n > 1 else ''} cobrir este turno"
 
 
 def avaliar_escala(funcionarios: list[Funcionario], periodo: Periodo,

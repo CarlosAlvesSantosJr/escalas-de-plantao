@@ -12,6 +12,8 @@ from escala.repositorio import EstadoApp, RepositorioJSON
 
 ARQUIVO_DADOS = Path(__file__).resolve().parent / "dados_escala.json"
 
+CARGO_POR_ROTULO = {c.rotulo: c for c in Cargo}
+
 CORES_STATUS = {
     Status.DISPONIVEL: "#e1f5fe",
     Status.INDISPONIVEL: "#ffcdd2",
@@ -106,8 +108,8 @@ class EscalaApp:
 
         self.ent_nome = ttk.Entry(frame_cad, width=30)
         self.ent_nome.grid(row=0, column=0, padx=5)
-        self.combo_tipo = ttk.Combobox(frame_cad, values=[c.value for c in Cargo], state="readonly")
-        self.combo_tipo.set(Cargo.ENFERMEIRO.value)
+        self.combo_tipo = ttk.Combobox(frame_cad, values=[c.rotulo for c in Cargo], state="readonly")
+        self.combo_tipo.set(Cargo.ENFERMEIRO.rotulo)
         self.combo_tipo.grid(row=0, column=1, padx=5)
 
         ttk.Button(frame_cad, text="Adicionar", command=self.add_funcionario).grid(row=0, column=2, padx=2)
@@ -138,7 +140,7 @@ class EscalaApp:
     def add_funcionario(self):
         nome = self._ler_nome()
         if nome:
-            self.funcionarios.append(Funcionario(nome, Cargo(self.combo_tipo.get())))
+            self.funcionarios.append(Funcionario(nome, CARGO_POR_ROTULO[self.combo_tipo.get()]))
             self._apos_alterar_equipe()
 
     def update_funcionario(self):
@@ -148,7 +150,7 @@ class EscalaApp:
         nome = self._ler_nome(ignorar_id=f.id)
         if nome:
             f.nome = nome
-            f.cargo = Cargo(self.combo_tipo.get())
+            f.cargo = CARGO_POR_ROTULO[self.combo_tipo.get()]
             self._apos_alterar_equipe()
 
     def delete_funcionario(self):
@@ -166,7 +168,7 @@ class EscalaApp:
         self.tree_func.delete(*self.tree_func.get_children())
         for f in self.funcionarios:
             # O id do funcionário vira o iid da linha: seleção não depende mais do índice.
-            self.tree_func.insert('', 'end', iid=f.id, values=(f.nome, f.cargo.value))
+            self.tree_func.insert('', 'end', iid=f.id, values=(f.nome, f.cargo.rotulo))
         self.update_combo_dispo()
 
     def carregar_dados_funcionario_form(self, event):
@@ -174,7 +176,7 @@ class EscalaApp:
         if f:
             self.ent_nome.delete(0, tk.END)
             self.ent_nome.insert(0, f.nome)
-            self.combo_tipo.set(f.cargo.value)
+            self.combo_tipo.set(f.cargo.rotulo)
 
     def limpar_campos_func(self):
         self.ent_nome.delete(0, tk.END)
@@ -246,8 +248,8 @@ class EscalaApp:
         self.lbl_resumo = ttk.Label(frame_top, text="")
         self.lbl_resumo.pack(side=tk.LEFT, padx=20)
 
-        self.tree_escala = ttk.Treeview(self.frame_escala, columns=('Data', 'Turno', 'Enf', 'Mot'), show='headings')
-        for col in ('Data', 'Turno', 'Enf', 'Mot'):
+        self.tree_escala = ttk.Treeview(self.frame_escala, columns=('Data', 'Turno', 'Enfermagem', 'Socorrista'), show='headings')
+        for col in ('Data', 'Turno', 'Enfermagem', 'Socorrista'):
             self.tree_escala.heading(col, text=col)
             self.tree_escala.column(col, anchor="center")
         self.tree_escala.tag_configure("vago", foreground="#c62828")

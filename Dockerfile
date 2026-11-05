@@ -27,4 +27,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
 
 # Um único worker: o repositório JSON usa lock em memória, que não é
 # compartilhado entre processos. Threads dão conta do uso doméstico.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "4", "webapp:create_app()"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--no-control-socket", "webapp:create_app()"]

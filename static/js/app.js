@@ -2,15 +2,29 @@
 // Escala de Plantão · SAMU 192 — frontend (vanilla JS, sem build)
 // ===================================================================
 
-const CARGOS = { ENFERMEIRO: "Enfermeiro(a)", MOTORISTA: "Motorista" };
-const CARGO_CURTO = { ENFERMEIRO: "E", MOTORISTA: "M" };
+// Valores internos ENFERMEIRO/MOTORISTA; na tela, Enfermagem e Socorrista.
+const CARGOS = { ENFERMEIRO: "Enfermagem", MOTORISTA: "Socorrista" };
+const CARGO_CURTO = { ENFERMEIRO: "E", MOTORISTA: "S" };
+const GRUPOS = { ENFERMEIRO: "Enfermagem", MOTORISTA: "Socorristas" };
+const PESSOAS = { ENFERMEIRO: ["profissional de enfermagem", "profissionais de enfermagem"],
+                  MOTORISTA: ["socorrista", "socorristas"] };
+const pessoas = (cargo, n) => PESSOAS[cargo][n === 1 ? 0 : 1];
 const STATUS_LABEL = { DISPONIVEL: "Disponível", INDISPONIVEL: "Indisponível", PREFERENCIAL: "Preferencial", FERIAS: "Férias" };
 const DOW = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const TURNOS = ["DIA", "NOITE"];
 const STEPS = ["periodo", "equipe", "disponibilidade", "revisao", "escala"];
+const VIEWS = [...STEPS, "auditoria"];
 const MAX_DIAS = 92;
+// Versão dos arquivos desta página (o servidor marca o app.js com ?v=...).
+const VERSAO_TELA = new URL(import.meta.url).searchParams.get("v");
+const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto",
+               "Setembro", "Outubro", "Novembro", "Dezembro"];
+const PAPEIS = { atual: "Escala atual", seguinte: "Escala do mês seguinte", anterior: "Anterior", futura: "Futura" };
+const INTERVALO_ATUALIZACAO = 3000; // ms entre consultas de mudanças feitas por outras pessoas
 
 const state = {
+  usuario: null,        // { nome, papel, admin }
+  recentes: new Set(),  // posições alteradas agora há pouco por outra pessoa (piscam)
   periodo: null,
   funcionarios: [],
   step: "periodo",
@@ -20,7 +34,9 @@ const state = {
   dispSelId: null,
   brush: "INDISPONIVEL",
   rascunho: null,       // escala em revisão (editável)
-  escala: null,         // última escala confirmada
+  escala: null,         // escala confirmada que está na tela (uma das `escalas`)
+  escalas: [],          // escalas confirmadas visíveis: atual, mês seguinte (e anteriores, para o ADM)
+  escalaSel: null,      // início (AAAA-MM-DD) da escala escolhida nas abas
   origem: null,         // de onde veio o rascunho: { tipo: "editar" | "importar", arquivo }
   historico: [],        // ajustes da revisão, para desfazer
   dadosMudaram: false,  // equipe ou disponibilidade mudou depois da proposta
@@ -56,15 +72,28 @@ const ehFds = (iso) => diaSemana(parseISO(iso)) >= 5;
 
 // ---------- infraestrutura ----------
 
+let gravacoesPendentes = 0; // a atualização automática espera as gravações terminarem
+
 async function api(method, url, body) {
-  const opts = { method, headers: {} };
+  const opts = { method, headers: { "X-Requested-With": "fetch" } };
   if (body instanceof FormData) {
     opts.body = body;
   } else if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch(url, opts);
+  const grava = method !== "GET";
+  if (grava) gravacoesPendentes++;
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } finally {
+    if (grava) gravacoesPendentes--;
+  }
+  if (res.status === 401 && !url.endsWith("api/login")) {
+    location.replace("login?expirou=1");
+    return new Promise(() => {}); // a página está saindo
+  }
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -122,7 +151,34 @@ function aplicarEstado(d) {
   state.periodo = d.periodo;
   state.funcionarios = d.funcionarios;
   if ("rascunho" in d) state.rascunho = d.rascunho;
-  if ("escala" in d) state.escala = d.escala;
+  if ("escalas" in d) {
+    state.escalas = d.escalas;
+    escolherEscala(state.escalaSel, d.escala?.periodo.inicio);
+  }
+}
+
+/** Mostra a escala com início `inicio`; se ela não existir, a `padrao` do servidor (atual ou mês seguinte). */
+function escolherEscala(inicio, padrao = null) {
+  const achar = (i) => i && state.escalas.find((e) => e.periodo.inicio === i);
+  state.escala = achar(inicio) || achar(padrao) || state.escalas[0] || null;
+  state.escalaSel = state.escala?.periodo.inicio ?? null;
+}
+
+/** Atualiza a escala escolhida com a resposta do servidor, mantendo o papel dela. */
+function substituirEscala(r) {
+  const i = state.escalas.findIndex((e) => e.periodo.inicio === r.periodo.inicio);
+  if (i >= 0) state.escalas[i] = { ...r, papel: state.escalas[i].papel };
+  escolherEscala(r.periodo.inicio);
+}
+
+const comEscala = (url) => (state.escalaSel ? `${url}${url.includes("?") ? "&" : "?"}inicio=${state.escalaSel}` : url);
+
+function nomeDoPeriodo(p) {
+  const [ai, mi, di] = p.inicio.split("-").map(Number);
+  const [af, mf, df] = p.fim.split("-").map(Number);
+  const ultimoDia = new Date(Date.UTC(af, mf, 0)).getUTCDate();
+  if (ai === af && mi === mf && di === 1 && df === ultimoDia) return `${MESES[mi - 1]} ${ai}`;
+  return `${fmtCurta(p.inicio)} a ${fmtCurta(p.fim)}`;
 }
 
 async function carregarEstado() {
@@ -132,11 +188,17 @@ async function carregarEstado() {
 
 // ---------- navegação ----------
 
+const ehAdmin = () => !!state.usuario?.admin;
+
 async function irPara(step) {
-  if (!STEPS.includes(step)) step = "periodo";
+  if (!VIEWS.includes(step)) step = "periodo";
+  if (!ehAdmin()) step = "escala"; // o perfil USUARIO só trabalha na escala confirmada
   state.step = step;
   if (location.hash !== `#${step}`) history.replaceState(null, "", `#${step}`);
-  STEPS.forEach((s) => ($(`#view-${s}`).hidden = s !== step));
+  VIEWS.forEach((s) => ($(`#view-${s}`).hidden = s !== step));
+  if (step === "auditoria") $("#btn-auditoria").setAttribute("aria-current", "page");
+  else $("#btn-auditoria").removeAttribute("aria-current");
+  if (step === "auditoria") carregarAuditoria();
   window.scrollTo({ top: Math.min(window.scrollY, $(".hero").offsetHeight), behavior: "smooth" });
   render();
   if ((step === "revisao" || step === "escala") && state.recarregar) {
@@ -169,12 +231,13 @@ function renderStepper() {
 
 function renderHero() {
   const chips = [];
-  if (state.periodo) {
-    const n = diasDoPeriodo().length;
-    chips.push(`${icon("calendar")}${fmtCurta(state.periodo.inicio)} – ${fmtCurta(state.periodo.fim)} · ${n} dias`);
+  const periodoChip = ehAdmin() ? state.periodo : state.escala?.periodo;
+  if (periodoChip) {
+    const n = diasEntre(periodoChip.inicio, periodoChip.fim).length;
+    chips.push(`${icon("calendar")}${fmtCurta(periodoChip.inicio)} – ${fmtCurta(periodoChip.fim)} · ${n} dias`);
   }
   const n = (c) => state.funcionarios.filter((f) => f.cargo === c).length;
-  if (state.funcionarios.length) chips.push(`${icon("users")}${n("ENFERMEIRO")} enfermeiros · ${n("MOTORISTA")} motoristas`);
+  if (state.funcionarios.length) chips.push(`${icon("users")}${n("ENFERMEIRO")} de enfermagem · ${plural(n("MOTORISTA"), "socorrista", "socorristas")}`);
   if (state.rascunho) chips.push(`${icon("review")}Revisão em andamento`);
   if (state.escala) chips.push(`${icon("ambulance")}Escala final · cobertura ${Math.round(state.escala.cobertura * 100)}%`);
   $("#hero-chips").innerHTML = chips.map((c) => `<span class="hero__chip">${c}</span>`).join("");
@@ -184,7 +247,7 @@ function render() {
   renderStepper();
   renderHero();
   ({ periodo: renderPeriodo, equipe: renderEquipe, disponibilidade: renderDisponibilidade,
-     revisao: renderRevisao, escala: renderEscala })[state.step]();
+     revisao: renderRevisao, escala: renderEscala, auditoria: renderAuditoria })[state.step]();
 }
 
 // ===================================================================
@@ -303,11 +366,11 @@ function renderEquipe() {
 
 function renderSaudeEquipe() {
   const dias = diasDoPeriodo().length;
-  const linhas = Object.entries(CARGOS).map(([cargo, rotulo]) => {
+  const linhas = Object.keys(CARGOS).map((cargo) => {
     const n = state.funcionarios.filter((f) => f.cargo === cargo).length;
     const media = n && dias ? ` · ≈ ${Math.round((dias * 2) / n)} plantões cada` : "";
-    if (n >= 3) return `<div class="health__row ok">${icon("check")}${n} ${rotulo.toLowerCase()}${n > 1 ? "s" : ""}${media}</div>`;
-    const msg = n === 0 ? `Nenhum ${rotulo.toLowerCase()} — turnos ficarão vagos` : `Só ${n} ${rotulo.toLowerCase()} — recomendado 3 ou mais para garantir descanso`;
+    if (n >= 3) return `<div class="health__row ok">${icon("check")}${n} ${pessoas(cargo, n)}${media}</div>`;
+    const msg = n === 0 ? `Nenhum ${pessoas(cargo, 1)} — turnos ficarão vagos` : `Só ${n} ${pessoas(cargo, n)} — recomendado 3 ou mais para garantir descanso`;
     return `<div class="health__row warn">${icon("alert")}${msg}</div>`;
   });
   $("#equipe-saude").innerHTML = linhas.join("");
@@ -401,10 +464,10 @@ function renderDisponibilidade() {
 }
 
 function renderListaDisp() {
-  const grupos = Object.entries(CARGOS).map(([cargo, rotulo]) => {
+  const grupos = Object.keys(CARGOS).map((cargo) => {
     const itens = state.funcionarios.filter((f) => f.cargo === cargo).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     if (!itens.length) return "";
-    return `<li class="group-title" role="presentation">${rotulo}s</li>` + itens.map((f) => {
+    return `<li class="group-title" role="presentation">${GRUPOS[cargo]}</li>` + itens.map((f) => {
       const vals = Object.values(f.disponibilidade);
       const bloq = vals.filter((s) => s === "INDISPONIVEL" || s === "FERIAS").length;
       const pref = vals.filter((s) => s === "PREFERENCIAL").length;
@@ -580,17 +643,21 @@ function kpisHTML(r, editavel) {
   const nc = r.conflitos.length;
   const kpi = (rotulo, valor, dica, tom) =>
     `<div class="kpi ${tom}"><div class="kpi__label">${rotulo}</div><div class="kpi__value">${valor}</div><div class="kpi__hint">${dica}</div></div>`;
-  return [
+  const basicos = [
     kpi("Cobertura", `${cob}%`, "posições preenchidas", cob === 100 ? "is-good" : "is-bad"),
     kpi("Vagas em aberto", r.vagas.length,
       r.vagas.length ? (editavel ? "clique na vaga para preencher" : "precisam de ajuste") : "nenhuma",
       r.vagas.length ? "is-bad" : "is-good"),
+  ];
+  if (!ehAdmin()) return basicos.join(""); // conflitos e equilíbrio são do ADM
+  return [
+    ...basicos,
     kpi("Conflitos", nc, nc ? "regras quebradas por ajustes" : "todas as regras respeitadas", nc ? "is-warn" : "is-good"),
     kpi("Equilíbrio", eq <= 1 ? "Ótimo" : `±${eq}`, "diferença máx. de plantões no cargo", eq <= 1 ? "is-good" : eq <= 3 ? "is-warn" : "is-bad"),
   ].join("");
 }
 
-function alertasHTML(r, editavel) {
+function alertasHTML(r, editavel, alvo) {
   const item = (x, texto) => {
     const rotulo = `<strong>${quando(x.data, x.turno)}</strong> — ${CARGOS[x.cargo]}: ${texto}`;
     return `<li>${editavel ? `<button class="link" data-editar="${chavePos(x.data, x.turno, x.cargo)}">${rotulo}</button>` : rotulo}</li>`;
@@ -598,7 +665,8 @@ function alertasHTML(r, editavel) {
   const out = [];
   if (r.conflitos.length) {
     const dica = editavel
-      ? "Clique para corrigir, ou confirme assim mesmo se a exceção foi combinada com a equipe."
+      ? (alvo === "escala" ? "Clique para corrigir, se a exceção não foi combinada com a equipe."
+                           : "Clique para corrigir, ou confirme assim mesmo se a exceção foi combinada com a equipe.")
       : "A escala foi confirmada com exceções ou a disponibilidade mudou depois. Use <strong>Editar</strong> para ajustar.";
     out.push(`<div class="alert alert--warn">${icon("alert")}<div><strong>${plural(r.conflitos.length, "conflito", "conflitos")} com as regras.</strong> ${dica}
       <ul>${r.conflitos.map((c) => item(c, `${esc(c.nome)} · ${esc(c.motivo)}`)).join("")}</ul></div></div>`);
@@ -608,8 +676,8 @@ function alertasHTML(r, editavel) {
     out.push(`<div class="alert">${icon("alert")}<div><strong>${plural(r.vagas.length, "posição sem profissional", "posições sem profissional")}.</strong> ${dica}
       <ul>${r.vagas.map((v) => item(v, esc(v.motivo))).join("")}</ul></div></div>`);
   }
-  if (!out.length) out.push(`<div class="alert alert--ok">${icon("check")}Todos os turnos têm enfermeiro(a) e motorista, sem conflitos.</div>`);
-  const ociosos = r.estatisticas.filter((s) => s.total === 0);
+  if (!out.length) out.push(`<div class="alert alert--ok">${icon("check")}Todos os turnos têm enfermagem e socorrista${ehAdmin() ? ", sem conflitos" : ""}.</div>`);
+  const ociosos = ehAdmin() ? r.estatisticas.filter((s) => s.total === 0) : [];
   if (ociosos.length) {
     out.push(`<div class="alert alert--warn">${icon("alert")}<div><strong>Sem plantões no período:</strong> ${ociosos.map((s) => esc(s.nome)).join(", ")}</div></div>`);
   }
@@ -620,10 +688,10 @@ function legendaHTML(r, editavel) {
   const grupos = Object.keys(CARGOS).map((cargo) => {
     const pessoas = r.estatisticas.filter((s) => s.cargo === cargo).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     if (!pessoas.length) return "";
-    return `<div class="legend__group" role="group" aria-label="${cargo === "ENFERMEIRO" ? "Enfermagem" : "Motoristas"}">
-      <span class="legend__title">${cargo === "ENFERMEIRO" ? "Enfermagem" : "Motoristas"}</span>
+    return `<div class="legend__group" role="group" aria-label="${GRUPOS[cargo]}">
+      <span class="legend__title">${GRUPOS[cargo]}</span>
       ${pessoas.map((s) => `<button class="lchip c-${s.cargo} pc-${s.cor}" data-destacar="${s.id}" aria-pressed="${state.destaque === s.id}"
-          title="Destacar os plantões de ${esc(s.nome)}"><i></i>${esc(s.nome)}<span class="lchip__n">${s.total}</span></button>`).join("")}
+          title="Destacar os plantões de ${esc(s.nome)}"><i></i>${esc(s.nome)}${s.total != null ? `<span class="lchip__n">${s.total}</span>` : ""}</button>`).join("")}
     </div>`;
   });
   const chaves = [
@@ -639,7 +707,8 @@ function posHTML(p, cargo, conflitos, editavel) {
   const k = chavePos(p.data, p.turno, cargo);
   const motivos = conflitos.get(k);
   const editado = editavel && p.editados.includes(cargo);
-  const cls = ["pos", `c-${cargo}`, f ? `pc-${f.cor}` : "is-vago", motivos && "has-conflict", editado && "is-edited"].filter(Boolean).join(" ");
+  const cls = ["pos", `c-${cargo}`, f ? `pc-${f.cor}` : "is-vago", motivos && "has-conflict", editado && "is-edited",
+    state.recentes.has(k) && "is-recent"].filter(Boolean).join(" ");
   const desc = [`${quando(p.data, p.turno)}, ${CARGOS[cargo]}: ${f ? f.nome : "vaga em aberto"}`,
     motivos && `Conflito: ${motivos.join("; ")}`, editado && "Alterado manualmente"].filter(Boolean).join(". ");
   const conteudo = `<span class="pos__role" aria-hidden="true">${CARGO_CURTO[cargo]}</span>
@@ -672,7 +741,7 @@ function calendarioHTML(r, conflitos, editavel) {
 
 function listaHTML(r, conflitos, editavel) {
   return `<div class="table-wrap"><table class="table-escala">
-    <thead><tr><th>Data</th><th>Turno</th><th>Enfermagem</th><th>Condutor</th></tr></thead>
+    <thead><tr><th>Data</th><th>Turno</th><th>Enfermagem</th><th>Socorrista</th></tr></thead>
     <tbody>${r.plantoes.map((p) => `
       <tr class="${ehFds(p.data) ? "is-weekend" : ""} ${p.turno === "DIA" ? "is-new-day" : ""}">
         <td>${p.turno === "DIA" ? `${fmtLonga(p.data)} · ${DOW[diaSemana(parseISO(p.data))]}` : ""}</td>
@@ -700,13 +769,13 @@ function estatisticasHTML(r) {
       </tr>`).join("")}</tbody></table></div>`;
 }
 
-function renderPainel(el, r, editavel) {
+function renderPainel(el, r, editavel, alvo = "rascunho") {
   const conflitos = conflitosPorPosicao(r);
   const tabs = (attr, aria, opcoes, atual) => opcoes.map(([v, t]) =>
     `<button role="${aria === "selected" ? "tab" : "radio"}" class="tab" data-${attr}="${v}" aria-${aria}="${atual === v}">${t}</button>`).join("");
   el.innerHTML = `
-    <div class="kpis">${kpisHTML(r, editavel)}</div>
-    <div class="alerts">${alertasHTML(r, editavel)}</div>
+    <div class="kpis ${ehAdmin() ? "" : "kpis--2"}">${kpisHTML(r, editavel)}</div>
+    <div class="alerts">${alertasHTML(r, editavel, alvo)}</div>
     <div class="card card--flush">
       <div class="toolbar">
         <div class="tabs" role="tablist" aria-label="Visualização">${tabs("modo", "selected", [["calendario", "Calendário"], ["lista", "Lista"]], state.modo)}</div>
@@ -715,7 +784,7 @@ function renderPainel(el, r, editavel) {
             <span class="tabs__label" aria-hidden="true">Cores</span>
             ${tabs("cores", "checked", [["profissional", "Por profissional"], ["funcao", "Por função"]], state.cores)}
           </div>
-          ${editavel ? `<button class="btn btn--ghost btn--sm" data-acao="desfazer" ${state.historico.length ? "" : "disabled"}
+          ${editavel && alvo === "rascunho" ? `<button class="btn btn--ghost btn--sm" data-acao="desfazer" ${state.historico.length ? "" : "disabled"}
             title="Desfazer o último ajuste (Ctrl+Z)">${icon("undo")}Desfazer</button>` : ""}
         </div>
       </div>
@@ -724,10 +793,10 @@ function renderPainel(el, r, editavel) {
         ${state.modo === "calendario" ? calendarioHTML(r, conflitos, editavel) : listaHTML(r, conflitos, editavel)}
       </div>
     </div>
-    <div class="card card--flush card--stats">
+    ${ehAdmin() ? `<div class="card card--flush card--stats">
       <div class="toolbar"><h3>Distribuição por profissional</h3><span class="muted small">Clique para destacar na escala</span></div>
       ${estatisticasHTML(r)}
-    </div>`;
+    </div>` : ""}`;
   aplicarDestaque(el);
 }
 
@@ -741,33 +810,32 @@ function aplicarDestaque(painel) {
   $$(".stats-row", painel).forEach((tr) => tr.classList.toggle("is-active", tr.dataset.id === id));
 }
 
-function ligarPainel(el, editavel) {
+/** `qual`: "rascunho" (revisão, só ADM) ou "escala" (confirmada, editável por todos com auditoria). */
+function ligarPainel(el, qual) {
   el.addEventListener("click", (e) => {
     const t = e.target;
     const modo = t.closest("[data-modo]");
     if (modo) { state.modo = modo.dataset.modo; return render(); }
     const cores = t.closest("[data-cores]");
     if (cores) { state.cores = cores.dataset.cores; return render(); }
-    // Na escala final, clicar num nome também destaca a pessoa.
-    const alvo = t.closest("[data-destacar], .stats-row") || (!editavel && t.closest(".pos[data-pid]"));
+    const alvo = t.closest("[data-destacar], .stats-row");
     if (alvo) {
-      const id = alvo.dataset.destacar || alvo.dataset.id || alvo.dataset.pid;
+      const id = alvo.dataset.destacar || alvo.dataset.id;
       state.destaque = state.destaque === id ? null : id;
       aplicarDestaque(el);
       if (state.destaque && alvo.matches(".stats-row")) $("[data-escala]", el).scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
-    if (!editavel) return;
     if (t.closest('[data-acao="desfazer"]')) return desfazer();
     const pos = t.closest("[data-editar]");
-    if (pos) abrirEditor(...pos.dataset.editar.split("|"));
+    if (pos) abrirEditor(qual, ...pos.dataset.editar.split("|"));
   });
   el.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.matches(".stats-row")) e.target.click();
   });
 }
-ligarPainel($("#revisao-painel"), true);
-ligarPainel($("#escala-painel"), false);
+ligarPainel($("#revisao-painel"), "rascunho");
+ligarPainel($("#escala-painel"), "escala");
 
 // ---------- 4. Revisão ----------
 
@@ -777,6 +845,7 @@ function novoRascunho(r, origem = null) {
   state.historico = [];
   state.dadosMudaram = false;
   state.destaque = null;
+  state.finalMudou = null;
 }
 
 function renderRevisao() {
@@ -786,17 +855,30 @@ function renderRevisao() {
   $("#revisao-painel").hidden = !r;
   $("#btn-proposta").hidden = $("#btn-confirmar").hidden = !r;
   $("#banner-mudancas").hidden = !(r && state.dadosMudaram);
+  renderBannerFinalMudou();
   renderBannerOrigem();
   if (r) return renderPainel($("#revisao-painel"), r, true);
 
   $("#revisao-vazia-texto").textContent = !pronto
-    ? "Defina o período e cadastre ao menos um(a) enfermeiro(a) e um(a) motorista para gerar uma proposta, ou importe uma escala salva."
+    ? "Defina o período e cadastre ao menos um(a) profissional de enfermagem e um(a) socorrista para gerar uma proposta, ou importe uma escala salva."
     : state.escala
       ? "A escala final já foi confirmada. Você pode editá-la, gerar uma nova proposta ou importar uma escala salva."
       : "Gere uma proposta automática para revisar, ou importe uma escala salva antes.";
   $('#revisao-vazia [data-acao="editar-final"]').hidden = !state.escala;
   $('#revisao-vazia [data-acao="nova-proposta"]').disabled = !pronto;
 }
+
+/** A escala confirmada recebeu trocas enquanto o ADM revisava uma cópia dela. */
+function renderBannerFinalMudou() {
+  const b = $("#banner-final-mudou");
+  const ev = state.rascunho && state.finalMudou;
+  b.hidden = !ev;
+  if (!ev) return;
+  b.innerHTML = `${icon("alert")}<span><strong>${esc(ev.usuario)}</strong> trocou um plantão na escala confirmada
+    enquanto esta revisão estava aberta (${esc(ev.descricao)}). Se você confirmar esta revisão, ela substitui essas trocas.</span>
+    <button class="btn btn--small" data-goto-escala>Ver escala</button>`;
+}
+$("#banner-final-mudou").addEventListener("click", (e) => { if (e.target.closest("[data-goto-escala]")) irPara("escala"); });
 
 function renderBannerOrigem() {
   const b = $("#banner-origem");
@@ -832,16 +914,20 @@ async function confirmarEscala() {
   if (!r) return;
   const pendencias = [r.vagas.length && plural(r.vagas.length, "vaga em aberto", "vagas em aberto"),
     r.conflitos.length && plural(r.conflitos.length, "conflito", "conflitos")].filter(Boolean);
-  if (pendencias.length || state.escala) {
+  const sobrepostas = state.escalas.filter((e) => e.periodo.inicio <= r.periodo.fim && r.periodo.inicio <= e.periodo.fim);
+  if (pendencias.length || sobrepostas.length) {
     const texto = [pendencias.length && `Ainda há ${pendencias.join(" e ")}. Você pode confirmar assim mesmo e ajustar depois.`,
-      state.escala && "A escala final atual será substituída por esta versão."].filter(Boolean).join(" ");
+      sobrepostas.length && `A escala confirmada de ${sobrepostas.map((e) => nomeDoPeriodo(e.periodo)).join(" e ")} será substituída por esta versão. As outras escalas continuam publicadas.`]
+      .filter(Boolean).join(" ");
     const titulo = pendencias.length ? "Confirmar com pendências?" : "Substituir a escala final?";
     if (!(await confirmar(titulo, texto, "Confirmar escala", "primary"))) return;
   }
   try {
-    state.escala = await api("POST", "api/escala");
+    const nova = await api("POST", "api/escala");
     novoRascunho(null);
-    toast("Escala confirmada");
+    state.escalaSel = nova.periodo.inicio;
+    await carregarEstado();
+    toast(`Escala de ${nomeDoPeriodo(nova.periodo)} confirmada`);
     irPara("escala");
   } catch (err) {
     toast(err.message, "error");
@@ -852,7 +938,7 @@ async function editarFinal() {
   if (state.rascunho && !(await confirmar("Substituir a revisão em andamento?",
     "A revisão atual ainda não foi confirmada e será descartada para abrir a escala final.", "Substituir"))) return;
   try {
-    const d = await api("POST", "api/escala/editar");
+    const d = await api("POST", comEscala("api/escala/editar"));
     aplicarEstado(d.estado);
     novoRascunho(d.rascunho, { tipo: "editar" });
     irPara("revisao");
@@ -875,31 +961,33 @@ async function descartarRevisao() {
 // ---------- editor de posição ----------
 
 const modalPos = $("#modal-pos");
-let editando = null; // { data, turno, cargo, origem }
+let editando = null; // { qual, data, turno, cargo, esperado, origem }
 
-async function abrirEditor(data, turno, cargo) {
-  const atual = membroDe(plantaoDe(state.rascunho, data, turno), cargo);
-  editando = { data, turno, cargo, origem: document.activeElement };
+async function abrirEditor(qual, data, turno, cargo) {
+  const atual = membroDe(plantaoDe(state[qual], data, turno), cargo);
+  editando = { qual, data, turno, cargo, esperado: atual?.id ?? null, origem: document.activeElement };
   $("#pos-quando").innerHTML = `${icon(turno === "DIA" ? "sun" : "moon")}${quando(data, turno)}`;
-  $("#pos-titulo").textContent = `Escolher ${CARGOS[cargo].toLowerCase()}`;
-  $("#pos-atual").textContent = `Atualmente: ${atual ? atual.nome : "vaga em aberto"}`;
+  $("#pos-titulo").textContent = `Escolher ${pessoas(cargo, 1)}`;
+  $("#pos-atual").textContent = `Atualmente: ${atual ? atual.nome : "vaga em aberto"}`
+    + (qual === "escala" ? " · a troca fica registrada com o seu nome" : "");
   $("#pos-cands").innerHTML = `<p class="cands__title">Carregando…</p>`;
   modalPos.showModal();
   try {
-    renderCandidatos(await api("GET", `api/rascunho/candidatos?${new URLSearchParams({ data, turno, cargo })}`), atual);
+    const url = `${qual === "escala" ? "api/escala/candidatos" : "api/rascunho/candidatos"}?${new URLSearchParams({ data, turno, cargo })}`;
+    renderCandidatos(await api("GET", qual === "escala" ? comEscala(url) : url), atual, state[qual]);
   } catch (err) {
     modalPos.close();
     toast(err.message, "error");
   }
 }
 
-function renderCandidatos(lista, atual) {
-  const cor = new Map(state.rascunho.estatisticas.map((s) => [s.id, s.cor]));
+function renderCandidatos(lista, atual, escala) {
+  const cor = new Map(escala.estatisticas.map((s) => [s.id, s.cor]));
   const botao = (c) => {
     const ehAtual = atual?.id === c.id;
     const meta = c.impedimentos.length
       ? `<span class="cand__warn">${icon("alert")}${esc(c.impedimentos.join(" · "))}</span>`
-      : `${plural(c.total, "plantão", "plantões")}${c.preferencial ? ` · <span class="cand__pref">${icon("star")}turno preferencial</span>` : ""}`;
+      : `${c.total != null ? plural(c.total, "plantão", "plantões") : "Disponível"}${c.preferencial ? ` · <span class="cand__pref">${icon("star")}turno preferencial</span>` : ""}`;
     return `<button class="cand ${c.impedimentos.length ? "is-blocked" : ""}" data-escolher="${c.id}" ${ehAtual ? 'aria-current="true"' : ""}>
       ${avatarCor(c.nome, cor.get(c.id) ?? 0)}
       <span class="cand__info"><span class="cand__name">${esc(c.nome)}${ehAtual ? ' <span class="badge badge--atual">Atual</span>' : ""}</span>
@@ -920,9 +1008,12 @@ function renderCandidatos(lista, atual) {
 $("#pos-cands").addEventListener("click", (e) => {
   const b = e.target.closest("[data-escolher]");
   if (!b) return;
-  const { data, turno, cargo } = editando;
+  const { qual, data, turno, cargo, esperado } = editando;
   modalPos.close();
-  if (!b.hasAttribute("aria-current")) alterarPosicao({ data, turno, cargo, funcionario_id: b.dataset.escolher || null });
+  if (b.hasAttribute("aria-current")) return;
+  const alt = { data, turno, cargo, funcionario_id: b.dataset.escolher || null };
+  if (qual === "escala") alterarPlantaoFinal({ ...alt, esperado });
+  else alterarPosicao(alt);
 });
 $("#pos-fechar").addEventListener("click", () => modalPos.close());
 modalPos.addEventListener("click", (e) => {
@@ -963,6 +1054,29 @@ function desfazer() {
   if (ultimo && state.rascunho) alterarPosicao(ultimo, true);
 }
 
+/** Troca direto na escala confirmada. `esperado` = quem estava na posição quando a pessoa abriu o editor. */
+async function alterarPlantaoFinal(alt, desfazendo = false) {
+  const p = plantaoDe(state.escala, alt.data, alt.turno);
+  const editadoAntes = p.editados.includes(alt.cargo);
+  try {
+    substituirEscala(await api("PATCH", comEscala("api/escala"), [alt]));
+  } catch (err) {
+    if (err.status === 409) { // outra pessoa mexeu primeiro: mostra a versão atual
+      await carregarEstado().catch(() => {});
+      render();
+    }
+    return toast(err.message, "error");
+  }
+  render();
+  $(`#escala-painel [data-editar="${chavePos(alt.data, alt.turno, alt.cargo)}"]`)?.focus();
+  if (desfazendo) return toast("Troca desfeita");
+  const novo = membroDe(plantaoDe(state.escala, alt.data, alt.turno), alt.cargo);
+  const voltar = { data: alt.data, turno: alt.turno, cargo: alt.cargo, funcionario_id: alt.esperado,
+                   esperado: novo?.id ?? null, editado: editadoAntes };
+  toast(`${quando(alt.data, alt.turno)} · ${CARGOS[alt.cargo]}: ${novo ? novo.nome : "vaga em aberto"}. Todos já veem a mudança.`,
+    "ok", { rotulo: "Desfazer", fn: () => alterarPlantaoFinal(voltar, true) });
+}
+
 document.addEventListener("keydown", (e) => {
   if (state.step !== "revisao" || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== "z") return;
   if (e.target.matches("input, textarea") || $("dialog[open]")) return;
@@ -997,17 +1111,227 @@ inputImportar.addEventListener("change", async () => {
 
 // ---------- 5. Escala final ----------
 
+function renderMeses() {
+  const el = $("#escala-meses");
+  // Usuário: sempre as duas abas (a do mês seguinte aparece desabilitada até ser publicada).
+  // ADM: todas as escalas confirmadas guardadas.
+  const abas = ehAdmin()
+    ? state.escalas.map((e) => ({ papel: e.papel, e }))
+    : ["atual", "seguinte"].map((papel) => ({ papel, e: state.escalas.find((x) => x.papel === papel) }));
+  el.hidden = !abas.length || (ehAdmin() && abas.length < 2);
+  el.innerHTML = abas.map(({ papel, e }) => {
+    const sel = e && e.periodo.inicio === state.escalaSel;
+    const sub = e ? nomeDoPeriodo(e.periodo) : "ainda não publicada";
+    return `<button role="tab" class="mes ${e ? "" : "is-vazio"}" aria-selected="${!!sel}" ${e ? `data-escala-inicio="${e.periodo.inicio}"` : "disabled"}>
+      <span class="mes__papel">${PAPEIS[papel]}</span><span class="mes__nome">${sub}</span></button>`;
+  }).join("");
+}
+
+$("#escala-meses").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-escala-inicio]");
+  if (!b || b.dataset.escalaInicio === state.escalaSel) return;
+  escolherEscala(b.dataset.escalaInicio);
+  state.destaque = null;
+  render();
+});
+
 function renderEscala() {
+  renderMeses();
   const r = state.escala;
+  $("#link-json").href = comEscala("api/escala.json");
+  $("#link-pdf").href = comEscala("api/escala.pdf");
   $("#escala-vazia").hidden = !!r;
   $("#escala-painel").hidden = !r;
   $("#escala-acoes").hidden = !r;
   $("#banner-rascunho").hidden = !(r && state.rascunho);
   $("#escala-sub").textContent = r
-    ? `${fmtLonga(r.periodo.inicio)} a ${fmtLonga(r.periodo.fim)} · confirmada em ${fmtDataHora(r.confirmada_em)}`
+    ? `${nomeDoPeriodo(r.periodo)}: ${fmtLonga(r.periodo.inicio)} a ${fmtLonga(r.periodo.fim)} · confirmada em ${fmtDataHora(r.confirmada_em)}. `
+      + "Clique em um nome para trocar o profissional do plantão; a troca fica registrada."
     : "A versão confirmada, pronta para imprimir e distribuir.";
-  if (r) renderPainel($("#escala-painel"), r, false);
+  if (!ehAdmin()) {
+    $("#escala-vazia-texto").textContent = "A coordenação ainda não publicou a escala. Esta página se atualiza sozinha quando ela for confirmada.";
+  }
+  if (r) renderPainel($("#escala-painel"), r, true, "escala");
 }
+
+// ---------- Auditoria (ADM) ----------
+
+const TIPOS = {
+  PLANTAO_ALTERADO: ["Plantão alterado", "plantao"],
+  ESCALA_CONFIRMADA: ["Escala confirmada", "plantao"],
+  LOGIN: ["Entrada", "acesso"],
+  LOGOUT: ["Saída", "acesso"],
+  LOGIN_FALHOU: ["Acesso negado", "falha"],
+  LOGIN_BLOQUEADO: ["Acesso bloqueado", "falha"],
+  PERIODO_DEFINIDO: ["Período", "admin"],
+  FUNCIONARIO_ADICIONADO: ["Equipe", "admin"],
+  FUNCIONARIO_ALTERADO: ["Equipe", "admin"],
+  FUNCIONARIO_REMOVIDO: ["Equipe", "admin"],
+  DISPONIBILIDADE_ALTERADA: ["Disponibilidade", "admin"],
+  PROPOSTA_GERADA: ["Proposta gerada", "admin"],
+  REVISAO_DESCARTADA: ["Revisão descartada", "admin"],
+  ESCALA_IMPORTADA: ["Importação", "admin"],
+  ESCALA_EXPORTADA: ["Exportação", "admin"],
+  PDF_GERADO: ["PDF", "admin"],
+};
+const auditoria = { eventos: [], usuarios: [], carregado: false };
+
+async function carregarAuditoria() {
+  if (!ehAdmin()) return;
+  const usuario = $("#audit-usuario").value;
+  try {
+    const d = await api("GET", `api/auditoria?${new URLSearchParams({ usuario, limite: 3000 })}`);
+    Object.assign(auditoria, d, { carregado: true });
+  } catch (err) {
+    toast(err.message, "error");
+  }
+  if (state.step === "auditoria") renderAuditoria();
+}
+
+function renderAuditoria() {
+  const sel = $("#audit-usuario");
+  const escolhido = sel.value;
+  sel.innerHTML = `<option value="">Todos</option>` + auditoria.usuarios.map((n) => `<option>${esc(n)}</option>`).join("");
+  sel.value = escolhido;
+  $("#audit-csv").href = `api/auditoria.csv?${new URLSearchParams({ usuario: escolhido, limite: 20000 })}`;
+
+  const cat = $("#audit-categoria").value;
+  const lista = auditoria.eventos.filter((ev) => {
+    const c = (TIPOS[ev.tipo] || ["", "admin"])[1];
+    return !cat || c === cat || (cat === "admin" && ev.tipo === "ESCALA_CONFIRMADA");
+  });
+  $("#audit-total").textContent = auditoria.carregado ? plural(lista.length, "evento", "eventos") : "Carregando…";
+  const quandoEv = (iso) => `${fmtLonga(iso.slice(0, 10))} ${iso.slice(11, 19)}`;
+  $("#audit-linhas").innerHTML = lista.length
+    ? lista.map((ev) => {
+        const [rotulo, c] = TIPOS[ev.tipo] || [ev.tipo, "admin"];
+        return `<tr><td>${quandoEv(ev.quando)}</td><td><strong>${esc(ev.usuario || "—")}</strong></td>
+          <td><span class="audit-tipo audit-tipo--${c}">${esc(rotulo)}</span></td>
+          <td>${esc(ev.descricao)}</td><td class="muted small">${esc(ev.ip || "")}</td></tr>`;
+      }).join("")
+    : `<tr><td colspan="5" class="audit-vazio">${auditoria.carregado ? "Nenhum evento com esses filtros." : "Carregando…"}</td></tr>`;
+}
+
+$("#audit-usuario").addEventListener("change", carregarAuditoria);
+$("#audit-categoria").addEventListener("change", renderAuditoria);
+
+// ---------- Atualização automática ----------
+// A cada poucos segundos pergunta ao servidor se os dados mudaram (consulta leve).
+// Se mudaram, recarrega e avisa quem fez a alteração.
+
+const vivo = { versao: null, ultimoEvento: null, falhas: 0, rodando: false, ocultaDesde: null };
+const chaveEvento = (ev) => ev && `${ev.quando}|${ev.usuario}|${ev.descricao}`;
+const RECARREGAR_APOS_OCULTA = 2 * 60 * 1000; // aba escondida por mais tempo volta com a página recarregada
+
+function ocupado() {
+  const foco = document.activeElement;
+  return !!pintura || !!$("dialog[open]") || gravacoesPendentes > 0
+    || (state.step !== "escala" && foco?.matches?.("input, textarea, select"));
+}
+
+function setAoVivo(ok) {
+  $("#live").classList.toggle("is-off", !ok);
+  $("#live-texto").textContent = ok ? "Ao vivo" : "Reconectando…";
+}
+
+async function verificarAtualizacoes() {
+  if (vivo.rodando) return; // intervalo, foco e volta da aba podem disparar juntos
+  vivo.rodando = true;
+  try {
+    await verificar();
+  } finally {
+    vivo.rodando = false;
+  }
+}
+
+async function verificar() {
+  let v;
+  try {
+    v = await api("GET", "api/versao");
+    vivo.falhas = 0;
+    setAoVivo(true);
+  } catch {
+    if (++vivo.falhas >= 2) setAoVivo(false);
+    return;
+  }
+  // Outra pessoa entrou neste mesmo navegador: a sessão mudou para todas as abas.
+  // Recarrega para a tela assumir o nome e o perfil de quem está logado agora.
+  if (v.usuario && v.usuario !== state.usuario.nome) {
+    location.reload();
+    return;
+  }
+  // Saiu uma versão nova do sistema: recarrega para não ficar com a tela antiga.
+  if (v.app && VERSAO_TELA && v.app !== VERSAO_TELA && !ocupado()) {
+    location.reload();
+    return;
+  }
+  if (v.versao === vivo.versao || ocupado()) return; // ocupado: tenta de novo na próxima volta
+  const primeira = vivo.versao === null;
+  try {
+    await carregarEstado(); // na primeira volta também: pega trocas feitas enquanto a tela abria
+  } catch {
+    return;
+  }
+  vivo.versao = v.versao;
+  const ev = v.ultima;
+  const chave = chaveEvento(ev);
+  if (!primeira && ev && chave !== vivo.ultimoEvento && ev.usuario !== state.usuario.nome) avisarMudanca(ev);
+  vivo.ultimoEvento = chave;
+  render();
+  if (state.step === "auditoria") carregarAuditoria();
+}
+
+/** Aviso de troca feita por outra pessoa, com destaque na posição e atalho para a escala. */
+function avisarMudanca(ev) {
+  const d = ev.detalhes;
+  const outraEscala = d?.escala && d.escala !== state.escalaSel && state.escalas.some((e) => e.periodo.inicio === d.escala);
+  const ver = () => { if (outraEscala) escolherEscala(d.escala); irPara("escala"); };
+  const onde = outraEscala ? ` (${nomeDoPeriodo(state.escalas.find((e) => e.periodo.inicio === d.escala).periodo)})` : "";
+  toast(`${ev.usuario} · ${ev.descricao}${onde}`, "warn",
+    state.step !== "escala" || outraEscala ? { rotulo: "Ver escala", fn: ver } : null);
+  if (d?.data) {
+    const k = chavePos(d.data, d.turno, d.cargo);
+    state.recentes.add(k);
+    setTimeout(() => state.recentes.delete(k), 6000);
+  }
+  // ADM com uma revisão aberta: a revisão foi copiada antes desta troca.
+  if (ehAdmin() && state.rascunho && ev.tipo === "PLANTAO_ALTERADO") state.finalMudou = ev;
+}
+
+function iniciarAtualizacaoAutomatica() {
+  // Continua rodando com a aba em segundo plano (o navegador só espaça as consultas).
+  setInterval(verificarAtualizacoes, INTERVALO_ATUALIZACAO);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { vivo.ocultaDesde = Date.now(); return; }
+    const longe = vivo.ocultaDesde && Date.now() - vivo.ocultaDesde > RECARREGAR_APOS_OCULTA;
+    vivo.ocultaDesde = null;
+    // Aba que ficou muito tempo escondida (ou "adormecida" pelo navegador) volta recarregada.
+    if (longe && !ocupado()) location.reload();
+    else verificarAtualizacoes();
+  });
+  window.addEventListener("focus", verificarAtualizacoes);
+  window.addEventListener("online", verificarAtualizacoes);
+  window.addEventListener("pageshow", (e) => { if (e.persisted) location.reload(); }); // voltou pelo histórico
+  verificarAtualizacoes();
+}
+
+// ---------- Sessão ----------
+
+function renderUsuario() {
+  const u = state.usuario;
+  $("#userbar").hidden = false;
+  $("#user-nome").textContent = u.nome;
+  $("#user-papel").textContent = u.admin ? "ADM" : "";
+  $("#user-avatar").textContent = iniciais(u.nome);
+  $$("[data-admin]").forEach((el) => (el.hidden = !u.admin));
+  if (!u.admin) $("#hero-sub").textContent = "Consulte a escala e troque profissionais nos plantões. As mudanças aparecem para toda a equipe.";
+}
+
+$("#btn-auditoria").addEventListener("click", () => irPara(state.step === "auditoria" ? "escala" : "auditoria"));
+$("#btn-sair").addEventListener("click", async () => {
+  try { await api("POST", "api/logout"); } catch { /* a sessão termina de qualquer jeito */ }
+  location.replace("login?saiu=1");
+});
 
 // ---------- ações compartilhadas ----------
 
@@ -1030,11 +1354,15 @@ window.addEventListener("hashchange", () => irPara(location.hash.slice(1)));
 
 (async function init() {
   try {
+    state.usuario = await api("GET", "api/eu");
+    renderUsuario();
     await carregarEstado();
   } catch (err) {
     toast(`Falha ao carregar dados: ${err.message}`, "error");
+    if (!state.usuario) return;
   }
   const inicial = location.hash.slice(1)
-    || (!state.periodo ? "periodo" : !prontoParaGerar() ? "equipe" : state.escala && !state.rascunho ? "escala" : "revisao");
+    || (!state.periodo ? "periodo" : !prontoParaGerar() ? "equipe" : state.escala ? "escala" : "revisao");
   irPara(inicial);
+  iniciarAtualizacaoAutomatica();
 })();

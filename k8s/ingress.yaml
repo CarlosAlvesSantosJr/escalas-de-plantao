@@ -1,0 +1,27 @@
+# Acesso externo com HTTPS (certificado gratuito do Let's Encrypt via cert-manager).
+# Troque escala.SEU-DOMINIO.com.br pelo seu domínio (2 lugares) e aponte o DNS
+# desse nome para o IP externo do Ingress Controller (Traefik).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: escala
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    # Traefik: manda quem entrar por http:// para https:// (middleware.yaml)
+    traefik.ingress.kubernetes.io/router.middlewares: escala-plantao-https@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [escala.SEU-DOMINIO.com.br]
+      secretName: escala-tls
+  rules:
+    - host: escala.SEU-DOMINIO.com.br
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: escala
+                port:
+                  name: http

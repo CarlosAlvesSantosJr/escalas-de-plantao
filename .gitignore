@@ -7,3 +7,11 @@ dados/
 dados_escala.backup.json
 escala_emergencia.pdf
 escala_samu_*.pdf
+
+# Segredos do Kubernetes (usuários e chave de sessão)
+k8s/base/segredos/
+
+# Gerados pela aplicação quando roda fora do Docker
+.secret_key
+auditoria.jsonl
+/usuarios.json
