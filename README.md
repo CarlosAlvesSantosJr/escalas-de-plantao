@@ -11,7 +11,7 @@ Monta duplas de enfermagem e socorrista para cada turno, respeita folgas, féria
 ![Flask](https://img.shields.io/badge/Flask-API-000000?logo=flask&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-pronto-2496ED?logo=docker&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-pronto-326CE5?logo=kubernetes&logoColor=white)
-![Testes](https://img.shields.io/badge/testes-45%20passando-1E8E5A)
+![Testes](https://img.shields.io/badge/testes-57%20passando-1E8E5A)
 ![Licença](https://img.shields.io/badge/licença-MIT-C8102E)
 
 [Kubernetes](k8s/README.md) · [Funcionalidades](#-funcionalidades) · [Acesso e perfis](#-acesso-perfis-e-auditoria) · [Algoritmo](#-como-o-algoritmo-decide) · [Arquitetura](#-arquitetura) · [Estudo de caso](docs/PORTFOLIO.md)
@@ -67,6 +67,7 @@ Os conflitos com as regras, o equilíbrio, a contagem de plantões de cada pesso
 </table>
 
 - **Tempo real:** cada tela consulta o servidor a cada 3 segundos e se atualiza sozinha quando alguém troca um plantão, com um aviso de quem trocou e um destaque piscando na posição. Isso vale também com a aba em segundo plano; uma aba que ficou mais de 2 minutos escondida ou "adormecida" pelo navegador é recarregada ao voltar. Se duas pessoas tentarem trocar a mesma posição ao mesmo tempo, a segunda recebe um aviso em vez de sobrescrever a troca da primeira.
+- **Troca entre colegas (em testes):** quem clica no **próprio nome** escolhe o plantão de um colega e os dois trocam (SWAP), ou monta um **rodízio entre três**: cada um passa para o plantão do próximo. O sistema mostra antes como fica, bloqueia trocas que quebrem o descanso, dois plantões no mesmo dia ou férias, faz tudo de uma vez e registra na auditoria. Fica ligado só onde `ESCALA_TROCAS=1`, como no ambiente de testes (`k8s/testes/`).
 - **Escala atual e do mês seguinte:** a equipe vê as duas, em abas, e pode trocar plantões em qualquer uma para se organizar com antecedência. A aba do mês seguinte aparece como "ainda não publicada" até o ADM confirmar a escala.
 - **Versão nova:** quando uma versão nova do sistema é publicada, as telas abertas recarregam sozinhas, sem ficar com a tela antiga.
 - **Uma pessoa por navegador:** a sessão vale para o navegador inteiro. Se outra pessoa entrar no mesmo navegador, as abas abertas recarregam com o nome dela. Para testar dois usuários no mesmo computador, use uma janela anônima ou outro navegador para o segundo.

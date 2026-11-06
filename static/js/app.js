@@ -702,17 +702,21 @@ function legendaHTML(r, editavel) {
   return `<div class="legend">${grupos.join("")}${chaves.length ? `<div class="legend__keys">${chaves.join("")}</div>` : ""}</div>`;
 }
 
+let painelEmDesenho = null; // "rascunho" | "escala": qual painel posHTML está desenhando
+
 function posHTML(p, cargo, conflitos, editavel) {
   const f = membroDe(p, cargo);
+  const meu = painelEmDesenho === "escala" && ehMeu(f);
   const k = chavePos(p.data, p.turno, cargo);
   const motivos = conflitos.get(k);
   const editado = editavel && p.editados.includes(cargo);
   const cls = ["pos", `c-${cargo}`, f ? `pc-${f.cor}` : "is-vago", motivos && "has-conflict", editado && "is-edited",
-    state.recentes.has(k) && "is-recent"].filter(Boolean).join(" ");
+    state.recentes.has(k) && "is-recent", meu && "is-meu"].filter(Boolean).join(" ");
   const desc = [`${quando(p.data, p.turno)}, ${CARGOS[cargo]}: ${f ? f.nome : "vaga em aberto"}`,
-    motivos && `Conflito: ${motivos.join("; ")}`, editado && "Alterado manualmente"].filter(Boolean).join(". ");
+    motivos && `Conflito: ${motivos.join("; ")}`, editado && "Alterado manualmente",
+    meu && "Seu plantão: clique para trocar com um colega"].filter(Boolean).join(". ");
   const conteudo = `<span class="pos__role" aria-hidden="true">${CARGO_CURTO[cargo]}</span>
-    <span class="pos__name">${f ? esc(f.nome) : "VAGO"}</span>${editado ? icon("edit", "ic pos__mark") : ""}${motivos ? icon("alert", "ic pos__flag") : ""}`;
+    <span class="pos__name">${f ? esc(f.nome) : "VAGO"}</span>${meu ? icon("swap", "ic pos__mark pos__swap") : ""}${editado ? icon("edit", "ic pos__mark") : ""}${motivos ? icon("alert", "ic pos__flag") : ""}`;
   const attrs = `class="${cls}" ${f ? `data-pid="${f.id}"` : ""} title="${esc(desc)}"`;
   return editavel
     ? `<button type="button" ${attrs} data-editar="${k}" aria-label="${esc(desc)}. Alterar">${conteudo}</button>`
@@ -770,6 +774,7 @@ function estatisticasHTML(r) {
 }
 
 function renderPainel(el, r, editavel, alvo = "rascunho") {
+  painelEmDesenho = alvo;
   const conflitos = conflitosPorPosicao(r);
   const tabs = (attr, aria, opcoes, atual) => opcoes.map(([v, t]) =>
     `<button role="${aria === "selected" ? "tab" : "radio"}" class="tab" data-${attr}="${v}" aria-${aria}="${atual === v}">${t}</button>`).join("");
@@ -828,7 +833,10 @@ function ligarPainel(el, qual) {
     }
     if (t.closest('[data-acao="desfazer"]')) return desfazer();
     const pos = t.closest("[data-editar]");
-    if (pos) abrirEditor(qual, ...pos.dataset.editar.split("|"));
+    if (!pos) return;
+    const [data, turno, cargo] = pos.dataset.editar.split("|");
+    if (qual === "escala" && ehMeu(membroDe(plantaoDe(state.escala, data, turno), cargo))) return abrirTroca(data, turno, cargo);
+    abrirEditor(qual, data, turno, cargo);
   });
   el.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.matches(".stats-row")) e.target.click();
@@ -971,6 +979,7 @@ async function abrirEditor(qual, data, turno, cargo) {
   $("#pos-atual").textContent = `Atualmente: ${atual ? atual.nome : "vaga em aberto"}`
     + (qual === "escala" ? " · a troca fica registrada com o seu nome" : "");
   $("#pos-cands").innerHTML = `<p class="cands__title">Carregando…</p>`;
+  $("#pos-trocar").hidden = !(qual === "escala" && trocasLigadas() && atual);
   modalPos.showModal();
   try {
     const url = `${qual === "escala" ? "api/escala/candidatos" : "api/rascunho/candidatos"}?${new URLSearchParams({ data, turno, cargo })}`;
@@ -1016,6 +1025,11 @@ $("#pos-cands").addEventListener("click", (e) => {
   else alterarPosicao(alt);
 });
 $("#pos-fechar").addEventListener("click", () => modalPos.close());
+$("#pos-trocar").addEventListener("click", () => {
+  const { data, turno, cargo } = editando;
+  modalPos.close();
+  abrirTroca(data, turno, cargo);
+});
 modalPos.addEventListener("click", (e) => {
   // Clique no fundo escurecido fecha o editor.
   const r = modalPos.getBoundingClientRect();
@@ -1109,6 +1123,142 @@ inputImportar.addEventListener("change", async () => {
   }
 });
 
+
+// ---------- Troca de plantões com colegas (SWAP de 2 / rodízio de 3) ----------
+// Liga só onde o servidor tem ESCALA_TROCAS=1. O usuário clica no próprio nome e
+// escolhe o plantão do colega; no rodízio, escolhe também o de um segundo colega.
+
+const modalTroca = $("#modal-troca");
+let troca = null; // { inicio, base: Posicao, quem, modo: 2|3, escolhas: [{pos, id, nome}], opcoes, origem }
+
+const trocasLigadas = () => !!state.usuario?.recursos?.trocas;
+const ehMeu = (f) => trocasLigadas() && f && f.id === state.usuario.funcionario_id;
+
+async function abrirTroca(data, turno, cargo) {
+  const atual = membroDe(plantaoDe(state.escala, data, turno), cargo);
+  if (!atual) return;
+  troca = { inicio: state.escalaSel, base: { data, turno, cargo }, quem: atual, modo: 2, escolhas: [], opcoes: [],
+            origem: document.activeElement };
+  $("#troca-quando").innerHTML = `${icon(turno === "DIA" ? "sun" : "moon")}${quando(data, turno)} · ${CARGOS[cargo]}`;
+  $("#troca-titulo").textContent = atual.id === state.usuario.funcionario_id ? "Trocar meu plantão" : `Trocar o plantão de ${atual.nome}`;
+  modalTroca.showModal();
+  await carregarOpcoesTroca();
+}
+
+async function carregarOpcoesTroca() {
+  const posicoes = [troca.base, ...troca.escolhas.map((e) => e.pos)];
+  troca.opcoes = null;
+  renderTroca();
+  try {
+    troca.opcoes = await api("POST", comEscala("api/escala/troca/opcoes"), { posicoes });
+  } catch (err) {
+    modalTroca.close();
+    return toast(err.message, "error");
+  }
+  renderTroca();
+}
+
+function renderTroca() {
+  const t = troca;
+  const etapa = t.escolhas.length; // 0: escolhendo o 1º colega; 1: (rodízio) o 2º colega
+  const completo = etapa === t.modo - 1;
+  $$("#troca-modo [data-modo-troca]").forEach((b) => {
+    b.setAttribute("aria-checked", String(Number(b.dataset.modoTroca) === t.modo));
+    b.disabled = etapa > 0;
+  });
+  const voce = t.quem.id === state.usuario.funcionario_id ? "você" : t.quem.nome;
+  $("#troca-sub").textContent = t.modo === 2
+    ? `Escolha o plantão do colega: ${voce} fica com ele, e o colega fica com o seu.`
+    : "Rodízio: escolha o plantão do 1º colega e depois o do 2º. Cada um passa para o plantão do próximo.";
+
+  let corpo = "";
+  if (!completo) {
+    corpo = `<p class="cands__title">${t.modo === 3 ? `${etapa + 1}º colega · ` : ""}escolha um plantão</p>`;
+    if (t.opcoes === null) corpo += `<p class="muted small troca__carregando">Carregando…</p>`;
+    else if (!t.opcoes.length) corpo += `<p class="muted small">Ninguém da ${CARGOS[t.base.cargo].toLowerCase()} tem plantão nesta escala para trocar.</p>`;
+    else corpo += t.opcoes.map((o) => {
+      const livres = o.plantoes.filter((p) => !p.motivos.length).length;
+      return `<div class="troca__colega">
+        <div class="troca__nome">${avatarCor(o.nome, corDe(o.id))}<span>${esc(o.nome)}</span>
+          <span class="muted small">${livres ? plural(livres, "plantão disponível", "plantões disponíveis") : "nenhum plantão compatível"}</span></div>
+        <div class="troca__chips">${o.plantoes.map((p) => {
+          const bloq = p.motivos.length > 0;
+          return `<button type="button" class="troca__chip ${bloq ? "is-bloq" : ""}" ${bloq ? "disabled" : ""}
+              data-troca-pos="${p.data}|${p.turno}" data-troca-id="${o.id}" data-troca-nome="${esc(o.nome)}"
+              title="${esc(bloq ? p.motivos.join("; ") : "Escolher este plantão")}">
+              ${icon(p.turno === "DIA" ? "sun" : "moon")}${DOW[diaSemana(parseISO(p.data))]} ${fmtCurta(p.data)}${bloq ? icon("alert") : ""}</button>`;
+        }).join("")}</div></div>`;
+    }).join("");
+  }
+  $("#troca-corpo").innerHTML = corpo;
+
+  // Resumo de quem vai para onde (ciclo: cada um vai para o plantão do próximo).
+  const cadeia = [{ pos: t.base, nome: t.quem.id === state.usuario.funcionario_id ? `${t.quem.nome} (você)` : t.quem.nome },
+                  ...t.escolhas.map((e) => ({ pos: e.pos, nome: e.nome }))];
+  const linhas = cadeia.length > 1 ? cadeia.map((c, i) => {
+    const destino = cadeia[(i + 1) % cadeia.length].pos;
+    return `<li><strong>${esc(c.nome)}</strong> ${icon("arrow")} ${quando(destino.data, destino.turno)}</li>`;
+  }) : [];
+  $("#troca-resumo").innerHTML = linhas.length
+    ? `<p class="cands__title">${completo ? "Como fica" : "Até agora"}</p><ul>${linhas.join("")}</ul>` : "";
+  $("#troca-resumo").hidden = !linhas.length;
+  $("#troca-voltar").hidden = !etapa;
+  $("#troca-confirmar").disabled = !completo;
+}
+
+const corDe = (id) => state.escala?.estatisticas.find((s) => s.id === id)?.cor ?? 0;
+
+$("#troca-modo").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-modo-troca]");
+  if (!b || b.disabled) return;
+  troca.modo = Number(b.dataset.modoTroca);
+  renderTroca();
+});
+
+$("#troca-corpo").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-troca-pos]");
+  if (!b || b.disabled) return;
+  const [data, turno] = b.dataset.trocaPos.split("|");
+  troca.escolhas.push({ pos: { data, turno, cargo: troca.base.cargo }, id: b.dataset.trocaId, nome: b.dataset.trocaNome });
+  if (troca.escolhas.length < troca.modo - 1) await carregarOpcoesTroca(); // rodízio: agora o 2º colega
+  else renderTroca();
+  $("#troca-confirmar").focus();
+});
+
+$("#troca-voltar").addEventListener("click", async () => {
+  troca.escolhas.pop();
+  await carregarOpcoesTroca();
+});
+
+$("#troca-confirmar").addEventListener("click", async () => {
+  const t = troca;
+  const posicoes = [{ ...t.base, esperado: t.quem.id }, ...t.escolhas.map((e) => ({ ...e.pos, esperado: e.id }))];
+  const botao = $("#troca-confirmar");
+  botao.classList.add("is-loading");
+  try {
+    substituirEscala(await api("POST", comEscala("api/escala/troca"), { posicoes }));
+    modalTroca.close();
+    posicoes.forEach((p) => {
+      const k = chavePos(p.data, p.turno, p.cargo);
+      state.recentes.add(k);
+      setTimeout(() => state.recentes.delete(k), 6000);
+    });
+    render();
+    toast(t.modo === 2 ? `Troca feita com ${t.escolhas[0].nome}. Todos já veem a mudança.`
+                       : `Rodízio feito com ${t.escolhas.map((e) => e.nome).join(" e ")}. Todos já veem a mudança.`);
+  } catch (err) {
+    modalTroca.close();
+    if (err.status === 409) { await carregarEstado().catch(() => {}); render(); }
+    toast(err.message, "error");
+  } finally {
+    botao.classList.remove("is-loading");
+  }
+});
+
+$("#troca-fechar").addEventListener("click", () => modalTroca.close());
+$("#troca-cancelar").addEventListener("click", () => modalTroca.close());
+modalTroca.addEventListener("close", () => { if (troca?.origem?.isConnected) troca.origem.focus(); });
+
 // ---------- 5. Escala final ----------
 
 function renderMeses() {
@@ -1146,7 +1296,9 @@ function renderEscala() {
   $("#banner-rascunho").hidden = !(r && state.rascunho);
   $("#escala-sub").textContent = r
     ? `${nomeDoPeriodo(r.periodo)}: ${fmtLonga(r.periodo.inicio)} a ${fmtLonga(r.periodo.fim)} · confirmada em ${fmtDataHora(r.confirmada_em)}. `
-      + "Clique em um nome para trocar o profissional do plantão; a troca fica registrada."
+      + (trocasLigadas() && state.usuario.funcionario_id
+        ? "Clique no seu nome (⇄) para trocar o plantão com um ou dois colegas; nos outros nomes, para substituir. Tudo fica registrado."
+        : "Clique em um nome para trocar o profissional do plantão; a troca fica registrada.")
     : "A versão confirmada, pronta para imprimir e distribuir.";
   if (!ehAdmin()) {
     $("#escala-vazia-texto").textContent = "A coordenação ainda não publicou a escala. Esta página se atualiza sozinha quando ela for confirmada.";
@@ -1158,6 +1310,7 @@ function renderEscala() {
 
 const TIPOS = {
   PLANTAO_ALTERADO: ["Plantão alterado", "plantao"],
+  PLANTAO_TROCADO: ["Troca entre colegas", "plantao"],
   ESCALA_CONFIRMADA: ["Escala confirmada", "plantao"],
   LOGIN: ["Entrada", "acesso"],
   LOGOUT: ["Saída", "acesso"],
@@ -1289,13 +1442,14 @@ function avisarMudanca(ev) {
   const onde = outraEscala ? ` (${nomeDoPeriodo(state.escalas.find((e) => e.periodo.inicio === d.escala).periodo)})` : "";
   toast(`${ev.usuario} · ${ev.descricao}${onde}`, "warn",
     state.step !== "escala" || outraEscala ? { rotulo: "Ver escala", fn: ver } : null);
-  if (d?.data) {
-    const k = chavePos(d.data, d.turno, d.cargo);
+  // Troca simples tem uma posição; troca entre colegas, duas ou três.
+  (d?.posicoes || (d?.data ? [d] : [])).forEach((p) => {
+    const k = chavePos(p.data, p.turno, p.cargo);
     state.recentes.add(k);
     setTimeout(() => state.recentes.delete(k), 6000);
-  }
+  });
   // ADM com uma revisão aberta: a revisão foi copiada antes desta troca.
-  if (ehAdmin() && state.rascunho && ev.tipo === "PLANTAO_ALTERADO") state.finalMudou = ev;
+  if (ehAdmin() && state.rascunho && ["PLANTAO_ALTERADO", "PLANTAO_TROCADO"].includes(ev.tipo)) state.finalMudou = ev;
 }
 
 function iniciarAtualizacaoAutomatica() {
@@ -1324,6 +1478,11 @@ function renderUsuario() {
   $("#user-papel").textContent = u.admin ? "ADM" : "";
   $("#user-avatar").textContent = iniciais(u.nome);
   $$("[data-admin]").forEach((el) => (el.hidden = !u.admin));
+  if (u.ambiente) {
+    $("#faixa-ambiente").hidden = false;
+    $("#faixa-ambiente-nome").textContent = u.ambiente;
+    document.title = `[${u.ambiente}] ${document.title}`;
+  }
   if (!u.admin) $("#hero-sub").textContent = "Consulte a escala e troque profissionais nos plantões. As mudanças aparecem para toda a equipe.";
 }
 

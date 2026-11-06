@@ -42,6 +42,8 @@ Tudo fica no arquivo `dados/dados_escala.json`, dentro da pasta do sistema: a eq
 
 **Escala atual e do mês seguinte:** na tela da Escala há duas abas, **Escala atual** e **Escala do mês seguinte**. Assim a equipe pode combinar trocas com antecedência. Para publicar o mês seguinte, a coordenação define o período (por exemplo, 01/12 a 31/12), gera a proposta e confirma: a escala do mês atual continua publicada. Confirmar de novo o mesmo período substitui só aquela escala. Enquanto o mês seguinte não for confirmado, a aba aparece como "ainda não publicada".
 
+**Troca entre colegas (só no ambiente de testes, por enquanto):** os seus plantões aparecem com o símbolo ⇄. Clique no seu nome, escolha **Com 1 colega** (vocês trocam os plantões) ou **Rodízio com 2 colegas** (cada um passa para o plantão do próximo), escolha os plantões e confira o quadro "Como fica" antes de **Confirmar troca**. Plantões que não podem entrar na troca aparecem apagados com ⚠; passe o mouse para ver o motivo (por exemplo, dois plantões no mesmo dia ou falta de descanso depois da noite).
+
 **Depois de uma atualização do sistema** as telas abertas recarregam sozinhas. Se alguém vir algo estranho (números como "NaN", nomes antigos), basta apertar F5. Para cadastrar quem pode entrar, veja "Criar os usuários" no [README](../README.md#-acesso-perfis-e-auditoria).
 
 O PDF traz uma linha por dia, com o turno DIA de um lado e a NOITE do outro (colunas Enfermagem e Socorrista). O resumo de plantões por pessoa fica só no sistema.

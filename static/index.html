@@ -34,8 +34,14 @@
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 2.5h8l4.5 4.5v14.5H6z"/><path d="M14 2.5V7h4.5M9 13h6M9 17h6"/></symbol>
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9.5 20.5H5a1.5 1.5 0 01-1.5-1.5V5A1.5 1.5 0 015 3.5h4.5M15.5 16.5L20 12l-4.5-4.5M20 12H9"/></symbol>
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.5l8 3v6c0 4.8-3.4 8.6-8 10-4.6-1.4-8-5.2-8-10v-6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></symbol>
   </svg>
+
+  <div class="faixa-ambiente" id="faixa-ambiente" role="note" hidden>
+    <strong>AMBIENTE DE <span id="faixa-ambiente-nome"></span></strong>
+    <span>Mudanças aqui não valem para a escala oficial.</span>
+  </div>
 
   <header class="hero">
     <div class="userbar" id="userbar" hidden>
@@ -300,12 +306,35 @@
         <p class="eyebrow" id="pos-quando"></p>
         <h3 id="pos-titulo"></h3>
         <p class="muted small" id="pos-atual"></p>
+        <button class="btn btn--ghost btn--sm pos__trocar" id="pos-trocar" hidden><svg class="ic"><use href="#i-swap"/></svg>Trocar com colegas</button>
       </div>
       <button class="icon-btn" id="pos-fechar" aria-label="Fechar">
         <svg class="ic"><use href="#i-x"/></svg>
       </button>
     </div>
     <div class="cands" id="pos-cands"></div>
+  </dialog>
+
+  <dialog class="modal modal--pos modal--troca" id="modal-troca" aria-labelledby="troca-titulo">
+    <div class="modal__head">
+      <div>
+        <p class="eyebrow" id="troca-quando"></p>
+        <h3 id="troca-titulo">Trocar plantão</h3>
+        <p class="muted small" id="troca-sub"></p>
+      </div>
+      <button class="icon-btn" id="troca-fechar" aria-label="Fechar"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="tabs troca__modo" id="troca-modo" role="radiogroup" aria-label="Tipo de troca">
+      <button role="radio" class="tab" data-modo-troca="2" aria-checked="true"><svg class="ic"><use href="#i-swap"/></svg>Com 1 colega</button>
+      <button role="radio" class="tab" data-modo-troca="3" aria-checked="false">Rodízio com 2 colegas</button>
+    </div>
+    <div class="troca__corpo" id="troca-corpo"></div>
+    <div class="troca__resumo" id="troca-resumo" hidden></div>
+    <div class="actions troca__acoes">
+      <button class="btn btn--ghost" id="troca-voltar" hidden><svg class="ic"><use href="#i-undo"/></svg>Voltar</button>
+      <button class="btn btn--ghost" id="troca-cancelar">Cancelar</button>
+      <button class="btn btn--primary" id="troca-confirmar" disabled><svg class="ic"><use href="#i-check"/></svg>Confirmar troca</button>
+    </div>
   </dialog>
 
   <script src="js/app.js" type="module"></script>

@@ -25,12 +25,15 @@ from escala.dominio import Cargo, Escala, Funcionario, Periodo, Status, Turno, n
 from escala.relatorio_pdf import gerar_pdf, ler_dados_embutidos
 from escala.repositorio import (EstadoApp, RepositorioJSON, escala_de_dict, escala_para_dict,
                                 periodo_para_dict)
-from escala.usuarios import Auditoria, CadastroUsuarios, LimiteTentativas, Usuario
+from escala.trocas import Posicao, TrocaInvalida
+from escala.trocas import aplicar as aplicar_troca
+from escala.trocas import impedimentos_da_troca, opcoes as opcoes_de_troca
+from escala.usuarios import Auditoria, CadastroUsuarios, LimiteTentativas, Usuario, chave_nome
 
 BASE_DIR = Path(__file__).resolve().parent
 MAX_DIAS = 92
 FORMATO_EXPORTACAO = "escala-samu"
-EVENTOS_DA_ESCALA = {"PLANTAO_ALTERADO", "ESCALA_CONFIRMADA"}
+EVENTOS_DA_ESCALA = {"PLANTAO_ALTERADO", "PLANTAO_TROCADO", "ESCALA_CONFIRMADA"}
 DOW = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 
 # Rotas acessíveis sem login.
@@ -38,7 +41,8 @@ ROTAS_PUBLICAS = {"/login", "/login.html", "/api/login", "/saude"}
 # Rotas da API liberadas para o perfil USUARIO (o resto exige ADMIN).
 API_USUARIO = {("GET", "/api/eu"), ("POST", "/api/logout"), ("GET", "/api/versao"),
                ("GET", "/api/estado"), ("GET", "/api/escala"), ("PATCH", "/api/escala"),
-               ("GET", "/api/escala/candidatos")}
+               ("GET", "/api/escala/candidatos"),
+               ("POST", "/api/escala/troca/opcoes"), ("POST", "/api/escala/troca")}
 
 
 class ErroDeNegocio(Exception):
@@ -182,6 +186,10 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     app.config.setdefault("HOJE", date.today)  # trocado nos testes
+    # Troca de plantões entre colegas (SWAP/rodízio): liga só onde ESCALA_TROCAS=1 (ambiente de testes).
+    app.config.setdefault("TROCAS", _ligado("ESCALA_TROCAS"))
+    # Nome do ambiente mostrado numa faixa no topo da tela (ex.: "TESTES"); vazio em produção.
+    app.config.setdefault("AMBIENTE", os.environ.get("ESCALA_AMBIENTE", "").strip())
     versao_tela = _versao_da_tela()
 
     def hoje() -> date:
@@ -241,6 +249,11 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
     def usuario_json(u: Usuario) -> dict:
         return {"nome": u.nome, "papel": u.papel.value, "admin": u.admin}
 
+    def funcionario_do_usuario(estado: EstadoApp, u: Usuario) -> Funcionario | None:
+        """O profissional da equipe com o mesmo nome do usuário logado (sem acento/caixa)."""
+        alvo = chave_nome(u.nome)
+        return next((f for f in estado.funcionarios if chave_nome(f.nome) == alvo), None)
+
     @app.get("/login")
     def pagina_login():
         if session.get("usuario") and cadastro.buscar(session["usuario"]):
@@ -285,7 +298,10 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
 
     @app.get("/api/eu")
     def eu():
-        return jsonify(usuario_json(g.usuario))
+        with repo.lock:
+            f = funcionario_do_usuario(repo.carregar(), g.usuario)
+        return jsonify(**usuario_json(g.usuario), funcionario_id=f.id if f else None,
+                       recursos={"trocas": app.config["TROCAS"]}, ambiente=app.config["AMBIENTE"])
 
     @app.get("/api/versao")
     def versao():
@@ -338,7 +354,7 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
 
     @app.get("/saude")
     def saude():
-        return jsonify(status="ok")
+        return jsonify(status="ok", ambiente=app.config["AMBIENTE"] or None)
 
     @app.get("/api/estado")
     def obter_estado():
@@ -551,6 +567,79 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
         for m in mudancas:
             registrar("PLANTAO_ALTERADO", m.pop("rotulo"), escala=final.periodo.inicio.isoformat(), **m)
         return jsonify(escala_json(estado, final, completo=g.usuario.admin))
+
+    # --- troca de plantões entre colegas (SWAP de 2, rodízio de 3) ------------
+
+    def posicoes_da_troca(corpo) -> list[Posicao]:
+        if not app.config["TROCAS"]:
+            raise ErroDeNegocio("A troca de plantões ainda não está disponível.", 404)
+        itens = (corpo or {}).get("posicoes")
+        if not isinstance(itens, list) or not itens:
+            raise ErroDeNegocio("Informe os plantões da troca.")
+        return [Posicao(_parse_data(i.get("data")), _parse_enum(Turno, i.get("turno")),
+                        _parse_enum(Cargo, i.get("cargo"))) for i in itens]
+
+    def exigir_dono(estado: EstadoApp, escala: Escala, primeira: Posicao) -> None:
+        """Usuário comum só começa uma troca a partir de um plantão dele mesmo."""
+        if g.usuario.admin:
+            return
+        meu = funcionario_do_usuario(estado, g.usuario)
+        try:
+            ocupante = escala.plantao(primeira.data, primeira.turno).equipe.get(primeira.cargo)
+        except KeyError:
+            raise ErroDeNegocio("Plantão fora do período desta escala.")
+        if not meu or not ocupante or ocupante.id != meu.id:
+            raise ErroDeNegocio("Você só pode propor trocas a partir de um plantão seu.", 403)
+
+    @app.post("/api/escala/troca/opcoes")
+    def opcoes_troca():
+        """Plantões de colegas que podem entrar na troca, com o motivo dos que não podem."""
+        corpo = request.get_json(force=True)
+        base = posicoes_da_troca(corpo)
+        if len(base) > 2:
+            raise ErroDeNegocio("A troca já tem o máximo de 3 pessoas.")
+        with repo.lock:
+            estado = repo.carregar()
+        escala = exigir_escala(estado)
+        exigir_dono(estado, escala, base[0])
+        try:
+            return jsonify(opcoes_de_troca(estado.funcionarios, escala, base))
+        except TrocaInvalida as e:
+            raise ErroDeNegocio(str(e))
+
+    @app.post("/api/escala/troca")
+    @transacao
+    def trocar_plantoes(estado: EstadoApp):
+        """Faz a troca (todos ao mesmo tempo). Corpo: {posicoes: [{data, turno, cargo, esperado}]}."""
+        corpo = request.get_json(force=True)
+        posicoes = posicoes_da_troca(corpo)
+        escala = exigir_escala(estado)
+        exigir_dono(estado, escala, posicoes[0])
+        # Ninguém mexeu nesses plantões desde que a tela foi aberta?
+        for item, p in zip(corpo["posicoes"], posicoes):
+            try:
+                atual = escala.plantao(p.data, p.turno).equipe.get(p.cargo)
+            except KeyError:
+                raise ErroDeNegocio(f"{p} está fora do período desta escala.")
+            if "esperado" in item and (atual.id if atual else None) != (item["esperado"] or None):
+                raise ErroDeNegocio(f"{p} acabou de ser alterado por outra pessoa. A tela foi atualizada; "
+                                    f"confira e tente de novo.", 409)
+        try:
+            problemas = impedimentos_da_troca(estado.funcionarios, escala, posicoes)
+            if problemas:
+                raise ErroDeNegocio("A troca não pode ser feita: " + "; ".join(
+                    f"{nome} ficaria com: {', '.join(m).lower()}" for nome, m in problemas.items()) + ".")
+            movs = aplicar_troca(escala, posicoes)
+        except TrocaInvalida as e:
+            raise ErroDeNegocio(str(e))
+        tipo = "Troca" if len(movs) == 2 else "Rodízio"
+        registrar("PLANTAO_TROCADO",
+                  f"{tipo} de plantões ({escala.periodo.inicio:%m/%Y}): "
+                  + "; ".join(f"{m.funcionario.nome} → {m.para}" for m in movs),
+                  escala=escala.periodo.inicio.isoformat(),
+                  posicoes=[{"data": m.para.data.isoformat(), "turno": m.para.turno.value,
+                             "cargo": m.para.cargo.value, "depois": m.funcionario.nome} for m in movs])
+        return jsonify(escala_json(estado, escala, completo=g.usuario.admin))
 
     @app.get("/api/escala/candidatos")
     def listar_candidatos_escala():

@@ -54,6 +54,32 @@ fixo, use um túnel nomeado da sua conta Cloudflare (veja os comentários em
 Desktop, e um "Reset Kubernetes cluster" os apaga, então faça backup
 (seção "Dia a dia").
 
+## Ambiente de testes (no mesmo cluster)
+
+`k8s/testes/` sobe uma segunda cópia do sistema no namespace `escala-teste`, com
+**dados e endereço próprios** e os recursos em teste ligados (hoje: troca de
+plantões entre colegas, `ESCALA_TROCAS=1`). Uma faixa amarela "AMBIENTE DE
+TESTES" aparece em todas as telas. Nada feito lá afeta a produção.
+
+```bash
+docker build -t escala-plantao:1.3.0 .
+kubectl apply -k k8s/testes/
+kubectl -n escala-teste logs deploy/cloudflared | grep trycloudflare   # endereço do teste
+```
+
+Copiar os dados atuais da produção para o teste (substitui os dados do teste):
+
+```bash
+PROD=$(kubectl -n escala-plantao get pod -l app.kubernetes.io/name=escala -o name | cut -d/ -f2)
+TESTE=$(kubectl -n escala-teste get pod -l app.kubernetes.io/name=escala -o name | cut -d/ -f2)
+kubectl -n escala-plantao cp $PROD:/data/dados_escala.json ./dados_prod.json
+kubectl -n escala-teste cp ./dados_prod.json $TESTE:/data/dados_escala.json
+```
+
+Para levar um recurso testado à produção: publique a versão em `k8s/tunel/`
+(nova tag) e acrescente a variável dele ao Deployment da produção. Para
+desligar o ambiente de testes: `kubectl delete namespace escala-teste`.
+
 ## Modo nuvem/VPS
 
 ## O que você precisa

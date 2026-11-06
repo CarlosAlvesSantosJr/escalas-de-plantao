@@ -1,0 +1,43 @@
+# AMBIENTE DE TESTES: mesma aplicação, em outro namespace, com dados e endereço próprios.
+# Liga recursos em teste (ESCALA_TROCAS) e mostra a faixa "AMBIENTE DE TESTES".
+# Nada aqui afeta a produção (namespace escala-plantao).
+#
+#   docker build -t escala-plantao:1.3.0 .
+#   kubectl apply -k k8s/testes/
+#   kubectl -n escala-teste logs deploy/cloudflared | grep trycloudflare
+#
+# Para copiar os dados atuais da produção para o teste, veja k8s/README.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: escala-teste
+
+resources:
+  - ../tunel
+
+images:
+  - name: escala-plantao
+    newName: escala-plantao
+    newTag: "1.3.0"
+
+patches:
+  # Nome do namespace (o da base é escala-plantao).
+  - target: { kind: Namespace, name: escala-plantao }
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: escala-teste
+  # Recursos em teste e faixa de ambiente.
+  - target: { kind: Deployment, name: escala }
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: { name: ESCALA_TROCAS, value: "1" }
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: { name: ESCALA_AMBIENTE, value: "TESTES" }
+  # O túnel aponta para o serviço deste namespace (não o da produção).
+  - target: { kind: Deployment, name: cloudflared }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/args
+        value: ["tunnel", "--no-autoupdate", "--url", "http://escala.escala-teste.svc.cluster.local:80"]

@@ -8,6 +8,14 @@ const botao = $("#entrar");
 const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sem armazenamento */ } };
 const lembrar = (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } };
 
+// Ambiente de testes: avisa já na tela de login.
+fetch("saude").then((r) => r.json()).then((d) => {
+  if (!d.ambiente) return;
+  $("#faixa-ambiente-nome").textContent = d.ambiente;
+  $("#faixa-ambiente").hidden = false;
+  document.title = `[${d.ambiente}] ${document.title}`;
+}).catch(() => {});
+
 const params = new URLSearchParams(location.search);
 if (params.has("expirou")) mostrarAviso("Sua sessão expirou. Entre novamente para continuar.");
 if (params.has("saiu")) mostrarAviso("Você saiu do sistema.");
