@@ -358,13 +358,38 @@ def test_confirmar_o_mesmo_periodo_substitui(client):
     assert len(client.get("/api/estado").get_json()["escalas"]) == 1
 
 
-def test_sem_escala_atual_abre_a_do_mes_seguinte(tmp_path):
+def test_so_escalas_futuras_viram_mes_atual_e_seguinte(tmp_path):
     c = _cliente(tmp_path / "dados.json", hoje=date(2026, 11, 20))
     _preparar(c)
     _confirmar(c, "2026-12-01", "2026-12-03")
     estado = c.get("/api/estado").get_json()
     assert estado["escala"]["periodo"]["inicio"] == "2026-12-01"
-    assert estado["escalas"][0]["papel"] == "seguinte"
+    assert estado["escalas"][0]["papel"] == "atual"
+    _confirmar(c, "2027-01-01", "2027-01-03")
+    papeis = [(e["periodo"]["inicio"], e["papel"]) for e in c.get("/api/estado").get_json()["escalas"]]
+    assert papeis == [("2026-12-01", "atual"), ("2027-01-01", "seguinte")]
+
+
+def test_par_so_avanca_quando_o_mes_vira_e_o_adm_confirma_a_nova():
+    from escala.repositorio import EstadoApp
+    from escala.dominio import Escala, Periodo
+
+    def esc(ano, mes):
+        return Escala(Periodo(date(ano, mes, 1), date(ano, mes, 28)), [])
+
+    def papeis(escalas, hoje):
+        e = EstadoApp(escalas=escalas)
+        return [(x.periodo.inicio.month, p) for x, p in zip(escalas, e.classificar(hoje).values())]
+
+    dez, jan, fev = esc(2026, 12), esc(2027, 1), esc(2027, 2)
+    # Novembro: dezembro e janeiro publicados.
+    assert papeis([dez, jan], date(2026, 11, 7)) == [(12, "atual"), (1, "seguinte")]
+    # Dezembro, com fevereiro já confirmado: o mês ainda não virou para janeiro.
+    assert papeis([dez, jan, fev], date(2026, 12, 20)) == [(12, "atual"), (1, "seguinte"), (2, "futura")]
+    # Virou para janeiro, mas fevereiro ainda não foi confirmado: o par não avança.
+    assert papeis([dez, jan], date(2027, 1, 5)) == [(12, "atual"), (1, "seguinte")]
+    # Virou o mês E o ADM confirmou fevereiro: janeiro vira o atual, fevereiro o seguinte.
+    assert papeis([dez, jan, fev], date(2027, 1, 5)) == [(12, "anterior"), (1, "atual"), (2, "seguinte")]
 
 
 def test_le_arquivo_com_uma_unica_escala(client, tmp_path):

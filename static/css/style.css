@@ -702,3 +702,7 @@ tr.is-weekend td:first-child { color: #3B6FD8; font-weight: 600; }
 .view__head--centro > div:first-child { flex: 1 1 100%; text-align: center; }
 .view__head--centro .actions { justify-content: center; }
 .view__head--centro .meses { justify-content: center; margin: 14px 0 0; }
+.toolbar__tools:not(:has(*)) { display: none; }
+/* Calendário | Lista centralizado (o Desfazer da Revisão fica ao lado) */
+.toolbar { justify-content: center; }
+@media (max-width: 640px) { .toolbar__tools { justify-content: center; } }

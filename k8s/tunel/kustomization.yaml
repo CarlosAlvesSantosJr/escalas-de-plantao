@@ -3,7 +3,7 @@
 # endereço https://xxxx.trycloudflare.com. Não precisa abrir portas no
 # roteador nem ter domínio. Só funciona enquanto o PC estiver ligado.
 #
-#   docker build -t escala-plantao:1.4.0 .     (mesma tag de newTag, abaixo)
+#   docker build -t escala-plantao:1.4.1 .     (mesma tag de newTag, abaixo)
 #   kubectl apply -k k8s/tunel/
 #   kubectl -n escala-plantao logs deploy/cloudflared | grep trycloudflare
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -18,4 +18,4 @@ resources:
 images:
   - name: escala-plantao
     newName: escala-plantao
-    newTag: "1.4.0"   # troque a cada versão nova
+    newTag: "1.4.1"   # troque a cada versão nova

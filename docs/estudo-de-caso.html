@@ -230,7 +230,7 @@ footer a { color: #FFB48A; }
         </div>
         <figure>
           <div class="shot"><img src="img/revisao.jpg" alt="Revisão da escala com a janela de troca aberta, listando quem pode assumir e quem tem impedimento" loading="lazy" width="1400" height="1000"></div>
-          <figcaption>Troca de socorrista: livres em cima, impedidos embaixo com o motivo.</figcaption>
+          <figcaption>Troca na enfermagem: livres em cima, com o total de plantões; impedidos embaixo, com o motivo.</figcaption>
         </figure>
       </div>
       <div class="step">
@@ -371,7 +371,7 @@ flowchart LR
     <div class="results">
       <div class="result is-good"><b>100%</b><span>das 124 posições do mês preenchidas</span></div>
       <div class="result is-good"><b>5 <small>→</small> 3</b><span>diferença máxima de plantões na enfermagem</span></div>
-      <div class="result"><b>47</b><span>testes automatizados de regra, API, auditoria e PWA</span></div>
+      <div class="result"><b>48</b><span>testes automatizados de regra, API, perfis, auditoria e PWA</span></div>
       <div class="result"><b>&lt;1<small>s</small></b><span>para gerar a escala de um mês</span></div>
     </div>
     <div class="table-wrap" style="margin-top:20px">
@@ -405,12 +405,14 @@ flowchart LR
       <p><strong>JSON em vez de banco de dados.</strong> Para uma base com uma coordenação, um arquivo legível é suficiente, simples de copiar como backup e compatível com a versão anterior do app.</p>
       <p><strong>UX pensada para quem usa.</strong> Pincel com arrastar em vez de clicar várias vezes por turno; atalhos de teclado de 1 a 4; layout pensado para o celular, instalável como app (PWA); identidade visual do SAMU.</p>
       <p><strong>Proposta, não imposição.</strong> O algoritmo sugere; a coordenação decide. A revisão avisa, mas não bloqueia: uma exceção combinada com a equipe vira um conflito visível, não um obstáculo. Rascunho e escala final ficam separados, então editar não mexe na versão publicada até a confirmação.</p>
+      <p><strong>A equipe troca plantões, com o descanso checado na hora.</strong> Depois de publicada, cada profissional entra com nome e matrícula, no celular, e troca quem está num plantão. O editor mostra quem pode assumir e quem tem impedimento, com o motivo ("Saindo do plantão da noite anterior", "Já tem outro plantão neste dia", "Tem plantão de dia logo após esta noite"). O servidor recusa a troca se outra pessoa mudou a mesma posição antes, e tudo vai para a auditoria da coordenação.</p>
+      <p><strong>Dois perfis, com permissão no servidor.</strong> A coordenação (ADM) vê tudo; a equipe vê só a escala do mês atual e do mês seguinte. Indicadores, conflitos, disponibilidade dos colegas e o total de plantões de cada um nem são enviados ao perfil da equipe.</p>
       <p><strong>Uma única fonte de regras.</strong> A mesma avaliação mede a escala gerada e a editada à mão. Não existe uma regra no algoritmo e outra na tela.</p>
       <p><strong>O PDF é o arquivo de troca.</strong> Os dados da escala vão embutidos no PDF que a equipe já recebe, e ele pode ser importado de volta. A coordenação não precisa guardar um segundo arquivo.</p>
       <p><strong>Cor como apoio, não como único sinal.</strong> Cada profissional tem uma cor, mas o nome e a função estão sempre escritos, com texto escuro sobre fundo claro. O resumo de plantões por pessoa fica só para a coordenação, fora do PDF e da impressão.</p>
     </div>
     <div class="chips" style="margin-top:20px">
-      <span class="chip">Python 3.12</span><span class="chip">Flask</span><span class="chip">Gunicorn</span><span class="chip">fpdf</span><span class="chip">JavaScript (ES modules)</span><span class="chip">CSS Grid</span><span class="chip">Docker Compose</span><span class="chip">pytest</span><span class="chip">Tkinter</span>
+      <span class="chip">Python 3.12</span><span class="chip">Flask</span><span class="chip">Gunicorn</span><span class="chip">fpdf</span><span class="chip">JavaScript (ES modules)</span><span class="chip">CSS Grid</span><span class="chip">Docker Compose</span><span class="chip">Kubernetes</span><span class="chip">PWA</span><span class="chip">pytest</span><span class="chip">Tkinter</span>
     </div>
   </section>
 
@@ -433,8 +435,9 @@ docker compose up -d --build
       <h2 id="proximos">O que vem depois</h2>
     </div>
     <ul class="stack prose muted" style="padding-left:20px;margin:0">
-      <li>Troca de plantão entre profissionais, com aprovação da coordenação.</li>
-      <li>Login e várias bases do SAMU no mesmo sistema.</li>
+      <li>Aprovação opcional da coordenação para trocas feitas pela equipe.</li>
+      <li>Várias bases do SAMU no mesmo sistema.</li>
+      <li>Endereço fixo (túnel nomeado ou domínio próprio) para o app instalado.</li>
       <li>Envio da escala por WhatsApp ou e-mail.</li>
     </ul>
   </section>

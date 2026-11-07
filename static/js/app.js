@@ -19,7 +19,7 @@ const MAX_DIAS = 92;
 const VERSAO_TELA = new URL(import.meta.url).searchParams.get("v");
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto",
                "Setembro", "Outubro", "Novembro", "Dezembro"];
-const PAPEIS = { atual: "Escala atual", seguinte: "Escala do mês seguinte", anterior: "Anterior", futura: "Futura" };
+const PAPEIS = { atual: "Mês atual", seguinte: "Mês seguinte", anterior: "Anterior", futura: "Futura" };
 const INTERVALO_ATUALIZACAO = 3000; // ms entre consultas de mudanças feitas por outras pessoas
 
 const state = {
@@ -42,7 +42,7 @@ const state = {
   dadosMudaram: false,  // equipe ou disponibilidade mudou depois da proposta
   recarregar: false,    // escalas precisam ser reavaliadas pelo servidor
   modo: matchMedia("(max-width: 760px)").matches ? "lista" : "calendario",
-  cores: "profissional",
+  cores: "profissional",   // sempre uma cor por profissional (o seletor saiu da tela)
   destaque: null,
 };
 
@@ -780,22 +780,18 @@ function renderPainel(el, r, editavel, alvo = "rascunho") {
   const tabs = (attr, aria, opcoes, atual) => opcoes.map(([v, t]) =>
     `<button role="${aria === "selected" ? "tab" : "radio"}" class="tab" data-${attr}="${v}" aria-${aria}="${atual === v}">${t}</button>`).join("");
   el.innerHTML = `
-    <div class="kpis ${ehAdmin() ? "" : "kpis--2"}">${kpisHTML(r, editavel)}</div>
-    <div class="alerts">${alertasHTML(r, editavel, alvo)}</div>
+    ${ehAdmin() ? `<div class="kpis">${kpisHTML(r, editavel)}</div>
+    <div class="alerts">${alertasHTML(r, editavel, alvo)}</div>` : ""}
     <div class="card card--flush">
-      <div class="toolbar">
-        <div class="tabs" role="tablist" aria-label="Visualização">${tabs("modo", "selected", [["calendario", "Calendário"], ["lista", "Lista"]], state.modo)}</div>
-        <div class="toolbar__tools">
-          <div class="tabs" role="radiogroup" aria-label="Colorir por">
-            <span class="tabs__label" aria-hidden="true">Cores</span>
-            ${tabs("cores", "checked", [["profissional", "Por profissional"], ["funcao", "Por função"]], state.cores)}
-          </div>
-          ${editavel && alvo === "rascunho" ? `<button class="btn btn--ghost btn--sm" data-acao="desfazer" ${state.historico.length ? "" : "disabled"}
-            title="Desfazer o último ajuste (Ctrl+Z)">${icon("undo")}Desfazer</button>` : ""}
-        </div>
-      </div>
       <div class="escala-area cores-${state.cores}" data-escala>
         ${legendaHTML(r, editavel)}
+        <div class="toolbar toolbar--modo">
+          <div class="tabs" role="tablist" aria-label="Visualização">${tabs("modo", "selected", [["calendario", "Calendário"], ["lista", "Lista"]], state.modo)}</div>
+          <div class="toolbar__tools">
+            ${editavel && alvo === "rascunho" ? `<button class="btn btn--ghost btn--sm" data-acao="desfazer" ${state.historico.length ? "" : "disabled"}
+              title="Desfazer o último ajuste (Ctrl+Z)">${icon("undo")}Desfazer</button>` : ""}
+          </div>
+        </div>
         ${state.modo === "calendario" ? calendarioHTML(r, conflitos, editavel) : listaHTML(r, conflitos, editavel)}
       </div>
     </div>
@@ -822,8 +818,6 @@ function ligarPainel(el, qual) {
     const t = e.target;
     const modo = t.closest("[data-modo]");
     if (modo) { state.modo = modo.dataset.modo; return render(); }
-    const cores = t.closest("[data-cores]");
-    if (cores) { state.cores = cores.dataset.cores; return render(); }
     const alvo = t.closest("[data-destacar], .stats-row");
     if (alvo) {
       const id = alvo.dataset.destacar || alvo.dataset.id;

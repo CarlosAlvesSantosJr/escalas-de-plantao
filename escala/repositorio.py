@@ -43,14 +43,27 @@ class EstadoApp:
         return next((e for e in self.escalas if e.periodo.inicio == inicio), None)
 
     def classificar(self, hoje: date) -> dict[date, str]:
-        """Papel de cada escala em relação a hoje: atual, seguinte, futura ou anterior."""
-        atual = next((e for e in self.escalas if e.periodo.inicio <= hoje <= e.periodo.fim), None)
-        corte = atual.periodo.fim if atual else hoje
-        seguinte = next((e for e in self.escalas if e.periodo.inicio > corte), None)
+        """Papel de cada escala: atual, seguinte (o par que a equipe vê), anterior ou futura.
+
+        A equipe vê sempre um par "mês atual + mês seguinte". O par só avança quando
+        as DUAS coisas acontecem: o mês virou (a escala seguinte já começou) e o ADM
+        confirmou uma escala nova depois dela. Então:
+          * atual = a escala mais recente que já começou E já tem uma sucessora;
+          * sem nenhuma assim (ex.: só há escalas futuras), a primeira que ainda
+            não terminou; sem ela, a mais recente;
+          * seguinte = a escala logo depois da atual.
+        Antes da atual: anterior. Depois da seguinte: futura (só o ADM vê).
+        """
+        es = self.escalas  # já ordenadas por início
+        if not es:
+            return {}
+        i = next((k for k in range(len(es) - 2, -1, -1) if es[k].periodo.inicio <= hoje), None)
+        if i is None:
+            i = next((k for k, e in enumerate(es) if e.periodo.fim >= hoje), len(es) - 1)
         papeis = {}
-        for e in self.escalas:
-            papeis[e.periodo.inicio] = ("atual" if e is atual else "seguinte" if e is seguinte
-                                        else "anterior" if e.periodo.fim < hoje else "futura")
+        for k, e in enumerate(es):
+            papeis[e.periodo.inicio] = ("atual" if k == i else "seguinte" if k == i + 1
+                                        else "anterior" if k < i else "futura")
         return papeis
 
     def escala_padrao(self, hoje: date) -> Escala | None:
