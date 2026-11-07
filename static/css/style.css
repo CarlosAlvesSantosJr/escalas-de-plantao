@@ -467,9 +467,6 @@ tr.is-weekend td:first-child { color: #3B6FD8; font-weight: 600; }
   .people--compact .person { flex: none; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .layout-side--wide > aside { position: static; }
-  .hero { background:
-    linear-gradient(180deg, rgba(14, 26, 43, .55), rgba(14, 26, 43, .95)),
-    url("../img/samu.jpg") left 49% / auto 134% no-repeat, var(--navy); }
 }
 @media (max-width: 640px) {
   .container { padding: 20px 16px 48px; }
@@ -612,3 +609,96 @@ tr.is-weekend td:first-child { color: #3B6FD8; font-weight: 600; }
 .mes.is-vazio .mes__nome { font-weight: 500; color: var(--ink-3); font-size: .92rem; }
 @media (max-width: 640px) { .mes { flex: 1 1 140px; min-width: 0; padding: 10px 12px; } }
 @media print { .meses { display: none !important; } }
+
+/* ---------- Previsão do tempo (topo) ---------- */
+.clima {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 10px;
+  padding: 6px 10px; border-radius: var(--radius-sm); width: fit-content; max-width: 100%;
+  background: rgba(14, 26, 43, .55); border: 1px solid rgba(255, 255, 255, .16); backdrop-filter: blur(6px);
+}
+.clima__agora { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.clima__icone { font-size: 1.25rem; line-height: 1; }
+.clima__temp { font-size: 1.3rem; font-weight: 800; letter-spacing: -.02em; line-height: 1; }
+.clima__info { display: grid; font-size: .72rem; color: #C9D3E1; line-height: 1.35; min-width: 0; }
+.clima__local { color: #fff; font-weight: 700; }
+.clima__dias { display: flex; gap: 4px; list-style: none; margin: 0; padding: 0 0 0 10px; border-left: 1px solid rgba(255, 255, 255, .16); }
+.clima__dias li { display: flex; align-items: center; gap: 3px; padding: 0 3px; font-size: .7rem; color: #C9D3E1; }
+.clima__dias li > span:first-child { font-weight: 700; color: #fff; }
+.clima__dias b { color: #fff; font-weight: 700; }
+.clima__dias small { font-size: .66rem; }
+.clima__dias li > span[aria-hidden] { font-size: .85rem; line-height: 1; }
+@media print { .clima { display: none !important; } }
+
+/* ---------- Celular: escala em lista vira cartões, sem rolagem lateral ---------- */
+@media (max-width: 760px) {
+  .table-escala, .table-escala tbody { display: block; }
+  .table-escala thead { display: none; }
+  .table-escala tr {
+    display: grid; grid-template-columns: 74px minmax(0, 1fr) minmax(0, 1fr); align-items: center;
+    gap: 6px; padding: 5px 12px; border-bottom: 1px solid var(--line);
+  }
+  .table-escala tr.is-new-day { border-top: 2px solid var(--line); padding-top: 10px; }
+  .table-escala tr.is-new-day td, .table-escala td { border: 0; padding: 0; }
+  .table-escala td:nth-child(n+3) { min-width: 0; }
+  .table-escala td:first-child { grid-column: 1 / -1; font-weight: 700; white-space: normal; }
+  .table-escala td:first-child:empty { display: none; }
+  .table-escala .pos { padding: 7px 8px 7px 6px; font-size: .8rem; }
+  .table-escala tbody tr:hover { background: none; }
+}
+@media (max-width: 640px) {
+  .hero__inner { min-height: 0; padding-bottom: 22px; }
+  .hero h1 { font-size: 1.85rem; }
+  .hero__chip { font-size: .76rem; padding: 5px 10px; }
+  .view__head .actions { width: 100%; justify-content: stretch; }
+  .view__head .actions .btn { flex: 1 1 auto; }
+  .kpi { padding: 12px 14px; }
+  .kpi__value { font-size: 1.5rem; }
+  .toolbar { padding: 12px; }
+  .clima { gap: 6px 10px; }
+  .clima__dias { width: 100%; justify-content: space-between; padding: 5px 0 0; border-left: 0; border-top: 1px solid rgba(255, 255, 255, .16); }
+}
+@media (max-width: 380px) {
+  .table-escala tr { grid-template-columns: 62px minmax(0, 1fr) minmax(0, 1fr); padding: 5px 8px; }
+  .table-escala .turno-pill { font-size: .7rem; }
+  .kpis { grid-template-columns: 1fr; }
+}
+
+/* ---------- Topo em telas menores: símbolo do SAMU livre à esquerda, tudo o mais à direita ---------- */
+.hero__chip-c { display: none; }
+@media (max-width: 960px) {
+  .hero {
+    background:
+      linear-gradient(90deg, rgba(14, 26, 43, 0) 0, rgba(14, 26, 43, 0) 30%, rgba(14, 26, 43, .85) 46%, var(--navy) 60%),
+      url("../img/samu.jpg") left 49% / auto 134% no-repeat, var(--navy);
+  }
+  .hero__inner { display: block; min-height: 0; padding: 24px 20px; }
+  .userbar:not([hidden]) + .hero__inner { padding-top: 60px; }
+  .hero__text { width: 58%; max-width: 460px; margin-left: auto; }
+  .hero h1 { font-size: 2rem; }
+  .hero__chips { margin-top: 12px; }
+  .hero .clima { width: 100%; }
+}
+@media (max-width: 640px) {
+  .hero { background-position: 0 0, 22% 49%, 0 0; }
+  .userbar:not([hidden]) + .hero__inner { padding-top: 6px; }
+  .hero__inner { padding: 6px 12px 16px; }
+  .hero__text { width: 55%; }
+  .hero__eyebrow { display: none; }
+  .hero h1 { font-size: 1.35rem; margin: 0 0 8px; }
+  .hero__chips { flex-direction: column; align-items: flex-start; gap: 5px; margin-top: 0; }
+  .hero__chip-l { display: none; }
+  .hero__chip-c { display: inline; }
+  .hero .clima { margin-top: 8px; padding: 6px 8px; }
+  .clima__icone { font-size: 1.05rem; }
+  .clima__temp { font-size: 1.1rem; }
+  .clima__info { font-size: .66rem; }
+  .clima__dias { gap: 2px; }
+  .clima__dias li { padding: 0; gap: 2px; font-size: .64rem; }
+  .clima__dias small, .clima__dias li > span[aria-hidden] { display: none; }
+}
+
+/* ---------- Título da escala centralizado ---------- */
+.view__head--centro { justify-content: center; }
+.view__head--centro > div:first-child { flex: 1 1 100%; text-align: center; }
+.view__head--centro .actions { justify-content: center; }
+.view__head--centro .meses { justify-content: center; margin: 14px 0 0; }

@@ -371,7 +371,7 @@ flowchart LR
     <div class="results">
       <div class="result is-good"><b>100%</b><span>das 124 posições do mês preenchidas</span></div>
       <div class="result is-good"><b>5 <small>→</small> 3</b><span>diferença máxima de plantões na enfermagem</span></div>
-      <div class="result"><b>31</b><span>testes automatizados de regra e API</span></div>
+      <div class="result"><b>47</b><span>testes automatizados de regra, API, auditoria e PWA</span></div>
       <div class="result"><b>&lt;1<small>s</small></b><span>para gerar a escala de um mês</span></div>
     </div>
     <div class="table-wrap" style="margin-top:20px">
@@ -403,7 +403,7 @@ flowchart LR
       <p><strong>Domínio puro e testável.</strong> As regras não conhecem Flask, Tkinter nem JSON. Isso permitiu escrever testes que provam cada regra. Um deles falha de propósito se o "olhar adiante" for desligado.</p>
       <p><strong>Frontend sem build.</strong> HTML, CSS e JavaScript puros, servidos pelo próprio Flask. Não há Node, bundler nem dependências de frontend para manter.</p>
       <p><strong>JSON em vez de banco de dados.</strong> Para uma base com uma coordenação, um arquivo legível é suficiente, simples de copiar como backup e compatível com a versão anterior do app.</p>
-      <p><strong>UX pensada para quem usa.</strong> Pincel com arrastar em vez de clicar várias vezes por turno; atalhos de teclado de 1 a 4; layout que funciona no celular; identidade visual do SAMU.</p>
+      <p><strong>UX pensada para quem usa.</strong> Pincel com arrastar em vez de clicar várias vezes por turno; atalhos de teclado de 1 a 4; layout pensado para o celular, instalável como app (PWA); identidade visual do SAMU.</p>
       <p><strong>Proposta, não imposição.</strong> O algoritmo sugere; a coordenação decide. A revisão avisa, mas não bloqueia: uma exceção combinada com a equipe vira um conflito visível, não um obstáculo. Rascunho e escala final ficam separados, então editar não mexe na versão publicada até a confirmação.</p>
       <p><strong>Uma única fonte de regras.</strong> A mesma avaliação mede a escala gerada e a editada à mão. Não existe uma regra no algoritmo e outra na tela.</p>
       <p><strong>O PDF é o arquivo de troca.</strong> Os dados da escala vão embutidos no PDF que a equipe já recebe, e ele pode ser importado de volta. A coordenação não precisa guardar um segundo arquivo.</p>

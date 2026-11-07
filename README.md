@@ -11,10 +11,11 @@ Monta duplas de enfermagem e socorrista para cada turno, respeita folgas, féria
 ![Flask](https://img.shields.io/badge/Flask-API-000000?logo=flask&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-pronto-2496ED?logo=docker&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-pronto-326CE5?logo=kubernetes&logoColor=white)
-![Testes](https://img.shields.io/badge/testes-45%20passando-1E8E5A)
+![PWA](https://img.shields.io/badge/PWA-instalável-5A0FC8?logo=pwa&logoColor=white)
+![Testes](https://img.shields.io/badge/testes-47%20passando-1E8E5A)
 ![Licença](https://img.shields.io/badge/licença-MIT-C8102E)
 
-[Kubernetes](k8s/README.md) · [Funcionalidades](#-funcionalidades) · [Acesso e perfis](#-acesso-perfis-e-auditoria) · [Algoritmo](#-como-o-algoritmo-decide) · [Arquitetura](#-arquitetura) · [Estudo de caso](docs/PORTFOLIO.md)
+[Kubernetes](k8s/README.md) · [Funcionalidades](#-funcionalidades) · [Celular e app](#-no-celular-e-como-app) · [Acesso e perfis](#-acesso-perfis-e-auditoria) · [Algoritmo](#-como-o-algoritmo-decide) · [Arquitetura](#-arquitetura) · [Estudo de caso](docs/PORTFOLIO.md)
 
 </div>
 
@@ -36,7 +37,7 @@ Montar essa escala à mão significa cruzar a disponibilidade de cada pessoa, tu
 | **2. Equipe** | Cadastro de profissionais de enfermagem e socorristas, com validação, busca e um alerta quando a equipe é pequena demais para garantir descanso. |
 | **3. Disponibilidade** | Calendário por pessoa com "pincel": **Indisponível**, **Preferencial** ou **Férias**. Clique ou arraste sobre os turnos; clique na data para o dia inteiro ou no dia da semana para todas as ocorrências. Salva sozinho. |
 | **4. Revisão** | Proposta automática que pode ser ajustada à mão: clique num nome, veja quem está livre (e o impedimento de quem não está), troque ou deixe vago. Conflitos com as regras aparecem na hora, com desfazer (Ctrl+Z). Nada vai para a escala final sem confirmação. |
-| **5. Escala** | Versão confirmada, com cores por profissional (ou por função), legenda que destaca os plantões de cada pessoa, indicadores e visão em calendário ou lista. Sai em PDF, imprime e exporta. Pode ser reaberta para edição. Várias escalas ficam publicadas ao mesmo tempo, em abas: **Escala atual** e **Escala do mês seguinte** (o ADM vê também as anteriores). Confirmar um período novo não apaga os outros. |
+| **5. Escala** | Versão confirmada, com cores por profissional (ou por função), legenda que destaca os plantões de cada pessoa, indicadores e visão em calendário ou lista. Sai em PDF, imprime e exporta (só o ADM). Pode ser reaberta para edição. Várias escalas ficam publicadas ao mesmo tempo, em abas: **Escala atual** e **Escala do mês seguinte** (o ADM vê também as anteriores). Confirmar um período novo não apaga os outros. |
 
 ## 🔐 Acesso, perfis e auditoria
 
@@ -44,8 +45,8 @@ Cada pessoa entra com **nome e matrícula**. A matrícula não fica guardada em 
 
 | Perfil | Pode |
 |---|---|
-| **ADM** | Tudo: equipe, período, disponibilidade, gerar e revisar propostas, confirmar, trocar plantões, PDF, importar e exportar, **conflitos com as regras**, **distribuição por profissional** e **auditoria** |
-| **Usuário** | Ver a escala confirmada (cobertura e vagas) e **trocar o profissional de um plantão** |
+| **ADM** | Tudo: equipe, período, disponibilidade, gerar e revisar propostas, confirmar, trocar plantões, PDF, imprimir, importar e exportar, **conflitos com as regras**, **distribuição por profissional** e **auditoria** |
+| **Usuário** | Ver a escala confirmada (cobertura e vagas) e **trocar o profissional de um plantão**. Não imprime nem baixa PDF |
 
 Os conflitos com as regras, o equilíbrio, a contagem de plantões de cada pessoa e os IPs da auditoria são do ADM. O servidor nem envia esses dados para o perfil Usuário.
 
@@ -72,7 +73,7 @@ Os conflitos com as regras, o equilíbrio, a contagem de plantões de cada pesso
 - **Uma pessoa por navegador:** a sessão vale para o navegador inteiro. Se outra pessoa entrar no mesmo navegador, as abas abertas recarregam com o nome dela. Para testar dois usuários no mesmo computador, use uma janela anônima ou outro navegador para o segundo.
 - **ADM com revisão aberta:** se um usuário trocar um plantão da escala confirmada enquanto o ADM revisa uma cópia, aparece um aviso na Revisão, porque confirmar a revisão substituiria essa troca.
 - **Nomes das funções:** na tela, no PDF e na auditoria, as colunas são **Enfermagem** e **Socorrista**.
-- **Auditoria** (só ADM): entradas, saídas, tentativas de acesso falhas e cada troca de plantão, no formato "Qua 02/12 DIA · Socorrista: DIEGO → BRUNO", com usuário, data, hora e IP. Dá para filtrar por pessoa ou por tipo e exportar em CSV.
+- **Auditoria** (só ADM): entradas, saídas, tentativas de acesso falhas e cada troca de plantão, no formato "Qua 02/12 DIA · Socorrista: DIEGO → BRUNO", com usuário, data, hora e IP. Dá para filtrar por pessoa ou por tipo e exportar em CSV. Ficam guardados os **últimos 30 dias**; eventos mais antigos são apagados automaticamente (ajustável pela variável `ESCALA_AUDITORIA_DIAS`).
 
 **Criar os usuários** (antes do primeiro acesso):
 
@@ -111,6 +112,14 @@ Na Revisão ou na Escala, use **Importar** com o **PDF baixado do sistema** (ele
     <td align="center"><sub>PDF para a equipe: DIA e NOITE lado a lado</sub></td>
   </tr>
 </table>
+
+## 📱 No celular e como app
+
+![Escala no celular: topo com o símbolo do SAMU e a escala em cartões](docs/img/celular.jpg)
+
+- **Responsivo:** no celular a escala abre em lista, com um cartão por dia (DIA e NOITE, enfermagem e socorrista lado a lado), sem rolagem lateral. O topo deixa o símbolo do SAMU sempre visível à esquerda e põe título, período, equipe, cobertura e clima numa coluna à direita, com textos curtos.
+- **Previsão do tempo:** o topo mostra o tempo de **Tubarão-SC** (agora, máxima e mínima do dia, chance de chuva e os próximos 3 dias), pela API pública e gratuita da [Open-Meteo](https://open-meteo.com), sem chave. Atualiza a cada 30 minutos; se a API estiver fora do ar, o quadro some e o resto funciona normalmente. A cidade fica em `CIDADE`, no início de `static/js/clima.js`.
+- **App instalável (PWA):** dá para instalar a escala na tela inicial do celular ou como app no computador ("Adicionar à tela inicial" no Android/iPhone, ou o ícone de instalar na barra do Chrome/Edge). Abre em tela cheia, com o ícone do SAMU. O service worker guarda só CSS, JS e imagens; a escala, o login e a auditoria vêm sempre do servidor, e sem internet aparece uma tela "Sem conexão". A instalação exige HTTPS (no Kubernetes com túnel ou domínio) ou `localhost`.
 
 ## ☸️ Kubernetes
 
@@ -169,6 +178,9 @@ escala/
 ├── usuarios.py        Login (matrícula em hash), limite de tentativas e auditoria
 └── relatorio_pdf.py   PDF com DIA e NOITE lado a lado, com os dados embutidos para reimportar
 static/                Frontend web (sem framework, sem build)
+├── js/clima.js        Previsão do tempo (Open-Meteo) no topo
+├── manifest.webmanifest · sw.js · offline.html   App instalável (PWA)
+└── img/icon-*.png     Ícones do app
 tests/                 Testes das regras e da API
 docs/                  Estudo de caso, fluxogramas e guia de instalação
 webapp.py              API REST Flask (com login e permissões por perfil)
@@ -208,9 +220,9 @@ Dockerfile · docker-compose.yml · iniciar.bat · iniciar.sh · parar.bat
 ## 🛠️ Tecnologias
 
 **Backend:** Python 3.12, Flask, Gunicorn, fpdf
-**Frontend:** HTML, CSS e JavaScript puros (ES modules)
+**Frontend:** HTML, CSS e JavaScript puros (ES modules), PWA (manifest + service worker), previsão do tempo pela Open-Meteo
 **Desktop:** Tkinter, tkcalendar
-**Infra:** Docker, Docker Compose
-**Qualidade:** pytest (31 testes de regras de negócio e API)
+**Infra:** Docker, Docker Compose, Kubernetes (Kustomize, Cloudflare Tunnel ou Ingress + Let's Encrypt)
+**Qualidade:** pytest (47 testes de regras de negócio, API, auditoria e PWA)
 
 

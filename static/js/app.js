@@ -41,7 +41,7 @@ const state = {
   historico: [],        // ajustes da revisão, para desfazer
   dadosMudaram: false,  // equipe ou disponibilidade mudou depois da proposta
   recarregar: false,    // escalas precisam ser reavaliadas pelo servidor
-  modo: matchMedia("(max-width: 640px)").matches ? "lista" : "calendario",
+  modo: matchMedia("(max-width: 760px)").matches ? "lista" : "calendario",
   cores: "profissional",
   destaque: null,
 };
@@ -60,7 +60,6 @@ const addDias = (d, n) => new Date(d.getTime() + n * 86400000);
 const diaSemana = (d) => (d.getUTCDay() + 6) % 7; // 0 = segunda
 const fmtCurta = (iso) => { const [, m, d] = iso.split("-"); return `${d}/${m}`; };
 const fmtLonga = (iso) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
-const fmtDataHora = (iso) => `${fmtLonga(iso.slice(0, 10))} às ${iso.slice(11, 16)}`;
 
 function diasEntre(inicio, fim) {
   const out = [];
@@ -234,13 +233,20 @@ function renderHero() {
   const periodoChip = ehAdmin() ? state.periodo : state.escala?.periodo;
   if (periodoChip) {
     const n = diasEntre(periodoChip.inicio, periodoChip.fim).length;
-    chips.push(`${icon("calendar")}${fmtCurta(periodoChip.inicio)} – ${fmtCurta(periodoChip.fim)} · ${n} dias`);
+    chips.push([icon("calendar"), `${fmtCurta(periodoChip.inicio)} – ${fmtCurta(periodoChip.fim)} · ${n} dias`,
+      `${fmtCurta(periodoChip.inicio)} – ${fmtCurta(periodoChip.fim)}`]);
   }
   const n = (c) => state.funcionarios.filter((f) => f.cargo === c).length;
-  if (state.funcionarios.length) chips.push(`${icon("users")}${n("ENFERMEIRO")} de enfermagem · ${plural(n("MOTORISTA"), "socorrista", "socorristas")}`);
-  if (state.rascunho) chips.push(`${icon("review")}Revisão em andamento`);
-  if (state.escala) chips.push(`${icon("ambulance")}Escala final · cobertura ${Math.round(state.escala.cobertura * 100)}%`);
-  $("#hero-chips").innerHTML = chips.map((c) => `<span class="hero__chip">${c}</span>`).join("");
+  if (state.funcionarios.length) chips.push([icon("users"), `${n("ENFERMEIRO")} de enfermagem · ${plural(n("MOTORISTA"), "socorrista", "socorristas")}`,
+    `${n("ENFERMEIRO")} enf. · ${n("MOTORISTA")} socorr.`]);
+  if (state.rascunho) chips.push([icon("review"), "Revisão em andamento", "Em revisão"]);
+  if (state.escala) {
+    const cob = Math.round(state.escala.cobertura * 100);
+    chips.push([icon("ambulance"), `Escala final · cobertura ${cob}%`, `Cobertura ${cob}%`]);
+  }
+  // Texto longo e curto: no celular os chips ficam numa coluna estreita ao lado do símbolo do SAMU.
+  $("#hero-chips").innerHTML = chips.map(([ic, longo, curto]) =>
+    `<span class="hero__chip" title="${longo}">${ic}<span class="hero__chip-l">${longo}</span><span class="hero__chip-c">${curto}</span></span>`).join("");
 }
 
 function render() {
@@ -1144,10 +1150,6 @@ function renderEscala() {
   $("#escala-painel").hidden = !r;
   $("#escala-acoes").hidden = !r;
   $("#banner-rascunho").hidden = !(r && state.rascunho);
-  $("#escala-sub").textContent = r
-    ? `${nomeDoPeriodo(r.periodo)}: ${fmtLonga(r.periodo.inicio)} a ${fmtLonga(r.periodo.fim)} · confirmada em ${fmtDataHora(r.confirmada_em)}. `
-      + "Clique em um nome para trocar o profissional do plantão; a troca fica registrada."
-    : "A versão confirmada, pronta para imprimir e distribuir.";
   if (!ehAdmin()) {
     $("#escala-vazia-texto").textContent = "A coordenação ainda não publicou a escala. Esta página se atualiza sozinha quando ela for confirmada.";
   }
@@ -1324,7 +1326,6 @@ function renderUsuario() {
   $("#user-papel").textContent = u.admin ? "ADM" : "";
   $("#user-avatar").textContent = iniciais(u.nome);
   $$("[data-admin]").forEach((el) => (el.hidden = !u.admin));
-  if (!u.admin) $("#hero-sub").textContent = "Consulte a escala e troque profissionais nos plantões. As mudanças aparecem para toda a equipe.";
 }
 
 $("#btn-auditoria").addEventListener("click", () => irPara(state.step === "auditoria" ? "escala" : "auditoria"));

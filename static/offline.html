@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sem conexão · Escala de Plantão SAMU 192</title>
+  <meta name="theme-color" content="#0E1A2B">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .offline { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: var(--navy); color: #fff; text-align: center; }
+    .offline__card { display: grid; gap: 14px; justify-items: center; max-width: 360px; }
+    .offline__card img { width: 112px; height: 112px; border-radius: 50%; box-shadow: 0 0 0 4px #fff; }
+    .offline__card p { color: #C9D3E1; }
+  </style>
+</head>
+<body>
+  <main class="offline">
+    <div class="offline__card">
+      <img src="img/icon-192.png" alt="SAMU 192">
+      <h1>Sem conexão</h1>
+      <p>A escala precisa de internet para mostrar a versão mais recente. Confira o sinal e tente de novo.</p>
+      <button class="btn btn--primary" onclick="location.href='/'">Tentar de novo</button>
+    </div>
+  </main>
+</body>
+</html>

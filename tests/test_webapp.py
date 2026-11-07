@@ -381,3 +381,42 @@ def test_paginas_marcam_a_versao_dos_arquivos(client):
     html = client.get("/").data.decode("utf-8")
     v = client.get("/api/versao").get_json()["app"]
     assert f"js/app.js?v={v}" in html and f"css/style.css?v={v}" in html
+
+
+# --- retenção da auditoria -------------------------------------------------
+
+def test_auditoria_guarda_so_os_ultimos_30_dias(tmp_path):
+    import json
+    from datetime import datetime, timedelta
+    from escala.usuarios import Auditoria
+
+    agora = datetime.now().astimezone()
+    caminho = tmp_path / "auditoria.jsonl"
+    linhas = [{"quando": (agora - timedelta(days=d)).isoformat(timespec="seconds"),
+               "tipo": "LOGIN", "usuario": f"U{d}", "descricao": "", "ip": None} for d in (45, 31, 29, 1)]
+    caminho.write_text("".join(json.dumps(l) + "\n" for l in linhas) + "linha quebrada\n", encoding="utf-8")
+
+    aud = Auditoria(caminho)  # limpa ao iniciar
+    assert [e["usuario"] for e in aud.listar()] == ["U1", "U29"]
+    assert "linha quebrada" in caminho.read_text(encoding="utf-8")  # sem data: mantida
+
+    aud.registrar("LOGOUT", "Ana", "Saiu")
+    assert [e["usuario"] for e in aud.listar()] == ["Ana", "U1", "U29"]
+
+
+# --- PWA (app instalável) --------------------------------------------------
+
+def test_pwa_manifesto_e_service_worker_sao_publicos(tmp_path):
+    from webapp import create_app
+    app = create_app(tmp_path / "dados.json", tmp_path / "usuarios.json", tmp_path / "auditoria.jsonl")
+    anonimo = app.test_client()  # o navegador busca o manifesto sem a sessão
+    r = anonimo.get("/manifest.webmanifest")
+    assert r.status_code == 200 and r.mimetype == "application/manifest+json"
+    manifesto = r.get_json(force=True)
+    assert manifesto["start_url"] == "/" and manifesto["display"] == "standalone"
+    for icone in manifesto["icons"]:
+        assert anonimo.get("/" + icone["src"]).status_code == 200
+    sw = anonimo.get("/sw.js")
+    assert sw.status_code == 200 and sw.headers["Cache-Control"] == "no-cache"
+    assert "/api/" in sw.data.decode()  # a API nunca vai para o cache
+    assert anonimo.get("/offline.html").status_code == 200

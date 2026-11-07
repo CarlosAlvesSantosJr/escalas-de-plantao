@@ -43,7 +43,7 @@ Uma aplicação web em cinco etapas. A coordenação informa as restrições; o 
 | **2. Equipe** | Cadastra os profissionais por função. O painel avisa quando a equipe é pequena demais para garantir descanso. |
 | **3. Disponibilidade** | Escolhe um "pincel" (Indisponível, Preferencial, Férias) e clica ou arrasta sobre os turnos. Clicar na data marca o dia inteiro; clicar em "Seg" marca todas as segundas. Salva sozinho. |
 | **4. Revisão** | Recebe a proposta automática e ajusta à mão: clica num nome, vê quem está livre e por que os outros não estão, troca ou deixa vago. Cada ajuste é checado contra as regras na hora, e dá para desfazer. |
-| **5. Escala** | Confirma a versão final. Cada profissional ganha uma cor, e a legenda destaca os plantões de cada um. Baixa o PDF, imprime ou exporta. A escala pode ser reaberta para edição ou importada em outro computador. |
+| **5. Escala** | Confirma a versão final. Cada profissional ganha uma cor, e a legenda destaca os plantões de cada um. Baixa o PDF, imprime ou exporta (só a coordenação). A escala pode ser reaberta para edição ou importada em outro computador. |
 
 ![Disponibilidade](img/disponibilidade.jpg)
 
@@ -168,7 +168,7 @@ flowchart LR
 | `escala/relatorio_pdf.py` | PDF com DIA e NOITE lado a lado, com os dados embutidos para reimportar |
 | `webapp.py` | API REST Flask e frontend em `static/` |
 | `app.py` | Versão desktop, usando o mesmo núcleo |
-| `tests/` | 31 testes de regras e da API |
+| `tests/` | 47 testes de regras, da API, da auditoria e do PWA |
 
 ### API
 
@@ -217,7 +217,8 @@ Comparação entre o algoritmo original e o novo, rodando sobre a disponibilidad
 - **Frontend sem build.** HTML, CSS e JavaScript puros, servidos pelo Flask. Não há Node nem bundler para manter.
 - **JSON em vez de banco.** Para uma base com uma coordenação, um arquivo legível basta, é fácil de copiar como backup e é compatível com a versão anterior.
 - **Container enxuto e seguro.** Imagem `python:3.12-slim` (cerca de 190 MB), usuário sem privilégios, healthcheck, porta exposta só para o próprio computador e dados num volume.
-- **UX para quem usa.** Pincel com arrastar, atalhos de teclado de 1 a 4, layout que funciona no celular e a identidade visual do SAMU.
+- **UX para quem usa.** Pincel com arrastar, atalhos de teclado de 1 a 4, a identidade visual do SAMU e um layout pensado para o celular: escala em cartões por dia, símbolo do SAMU sempre visível no topo, previsão do tempo de Tubarão-SC e instalação como app (PWA).
+- **Auditoria com prazo.** Os eventos ficam 30 dias e depois são apagados automaticamente, numa reescrita atômica do arquivo; o prazo é configurável.
 - **Proposta, não imposição.** O algoritmo sugere; a coordenação decide. A revisão avisa, mas não bloqueia: uma exceção combinada com a equipe vira um conflito visível em vez de um obstáculo.
 - **Uma única fonte de regras.** A mesma avaliação (`avaliacao.py`) mede a escala gerada e a editada à mão. Não existe uma regra no algoritmo e outra na tela.
 - **Rascunho separado da escala final.** Editar não mexe na versão publicada até a confirmação, e dá para descartar a edição.
