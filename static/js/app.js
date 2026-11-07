@@ -19,7 +19,7 @@ const MAX_DIAS = 92;
 const VERSAO_TELA = new URL(import.meta.url).searchParams.get("v");
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto",
                "Setembro", "Outubro", "Novembro", "Dezembro"];
-const PAPEIS = { atual: "Escala atual", seguinte: "Escala do mês seguinte", anterior: "Anterior", futura: "Futura" };
+const PAPEIS = { atual: "Mês atual", seguinte: "Mês seguinte", anterior: "Anterior", futura: "Futura" };
 const INTERVALO_ATUALIZACAO = 3000; // ms entre consultas de mudanças feitas por outras pessoas
 
 const state = {
@@ -41,8 +41,8 @@ const state = {
   historico: [],        // ajustes da revisão, para desfazer
   dadosMudaram: false,  // equipe ou disponibilidade mudou depois da proposta
   recarregar: false,    // escalas precisam ser reavaliadas pelo servidor
-  modo: matchMedia("(max-width: 640px)").matches ? "lista" : "calendario",
-  cores: "profissional",
+  modo: matchMedia("(max-width: 760px)").matches ? "lista" : "calendario",
+  cores: "profissional",   // sempre uma cor por profissional (o seletor saiu da tela)
   destaque: null,
 };
 
@@ -60,7 +60,6 @@ const addDias = (d, n) => new Date(d.getTime() + n * 86400000);
 const diaSemana = (d) => (d.getUTCDay() + 6) % 7; // 0 = segunda
 const fmtCurta = (iso) => { const [, m, d] = iso.split("-"); return `${d}/${m}`; };
 const fmtLonga = (iso) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
-const fmtDataHora = (iso) => `${fmtLonga(iso.slice(0, 10))} às ${iso.slice(11, 16)}`;
 
 function diasEntre(inicio, fim) {
   const out = [];
@@ -234,13 +233,20 @@ function renderHero() {
   const periodoChip = ehAdmin() ? state.periodo : state.escala?.periodo;
   if (periodoChip) {
     const n = diasEntre(periodoChip.inicio, periodoChip.fim).length;
-    chips.push(`${icon("calendar")}${fmtCurta(periodoChip.inicio)} – ${fmtCurta(periodoChip.fim)} · ${n} dias`);
+    chips.push([icon("calendar"), `${fmtCurta(periodoChip.inicio)} – ${fmtCurta(periodoChip.fim)} · ${n} dias`,
+      `${fmtCurta(periodoChip.inicio)} – ${fmtCurta(periodoChip.fim)}`]);
   }
   const n = (c) => state.funcionarios.filter((f) => f.cargo === c).length;
-  if (state.funcionarios.length) chips.push(`${icon("users")}${n("ENFERMEIRO")} de enfermagem · ${plural(n("MOTORISTA"), "socorrista", "socorristas")}`);
-  if (state.rascunho) chips.push(`${icon("review")}Revisão em andamento`);
-  if (state.escala) chips.push(`${icon("ambulance")}Escala final · cobertura ${Math.round(state.escala.cobertura * 100)}%`);
-  $("#hero-chips").innerHTML = chips.map((c) => `<span class="hero__chip">${c}</span>`).join("");
+  if (state.funcionarios.length) chips.push([icon("users"), `${n("ENFERMEIRO")} de enfermagem · ${plural(n("MOTORISTA"), "socorrista", "socorristas")}`,
+    `${n("ENFERMEIRO")} enf. · ${n("MOTORISTA")} socorr.`]);
+  if (state.rascunho) chips.push([icon("review"), "Revisão em andamento", "Em revisão"]);
+  if (state.escala) {
+    const cob = Math.round(state.escala.cobertura * 100);
+    chips.push([icon("ambulance"), `Escala final · cobertura ${cob}%`, `Cobertura ${cob}%`]);
+  }
+  // Texto longo e curto: no celular os chips ficam numa coluna estreita ao lado do símbolo do SAMU.
+  $("#hero-chips").innerHTML = chips.map(([ic, longo, curto]) =>
+    `<span class="hero__chip" title="${longo}">${ic}<span class="hero__chip-l">${longo}</span><span class="hero__chip-c">${curto}</span></span>`).join("");
 }
 
 function render() {
@@ -774,22 +780,18 @@ function renderPainel(el, r, editavel, alvo = "rascunho") {
   const tabs = (attr, aria, opcoes, atual) => opcoes.map(([v, t]) =>
     `<button role="${aria === "selected" ? "tab" : "radio"}" class="tab" data-${attr}="${v}" aria-${aria}="${atual === v}">${t}</button>`).join("");
   el.innerHTML = `
-    <div class="kpis ${ehAdmin() ? "" : "kpis--2"}">${kpisHTML(r, editavel)}</div>
-    <div class="alerts">${alertasHTML(r, editavel, alvo)}</div>
+    ${ehAdmin() ? `<div class="kpis">${kpisHTML(r, editavel)}</div>
+    <div class="alerts">${alertasHTML(r, editavel, alvo)}</div>` : ""}
     <div class="card card--flush">
-      <div class="toolbar">
-        <div class="tabs" role="tablist" aria-label="Visualização">${tabs("modo", "selected", [["calendario", "Calendário"], ["lista", "Lista"]], state.modo)}</div>
-        <div class="toolbar__tools">
-          <div class="tabs" role="radiogroup" aria-label="Colorir por">
-            <span class="tabs__label" aria-hidden="true">Cores</span>
-            ${tabs("cores", "checked", [["profissional", "Por profissional"], ["funcao", "Por função"]], state.cores)}
-          </div>
-          ${editavel && alvo === "rascunho" ? `<button class="btn btn--ghost btn--sm" data-acao="desfazer" ${state.historico.length ? "" : "disabled"}
-            title="Desfazer o último ajuste (Ctrl+Z)">${icon("undo")}Desfazer</button>` : ""}
-        </div>
-      </div>
       <div class="escala-area cores-${state.cores}" data-escala>
         ${legendaHTML(r, editavel)}
+        <div class="toolbar toolbar--modo">
+          <div class="tabs" role="tablist" aria-label="Visualização">${tabs("modo", "selected", [["calendario", "Calendário"], ["lista", "Lista"]], state.modo)}</div>
+          <div class="toolbar__tools">
+            ${editavel && alvo === "rascunho" ? `<button class="btn btn--ghost btn--sm" data-acao="desfazer" ${state.historico.length ? "" : "disabled"}
+              title="Desfazer o último ajuste (Ctrl+Z)">${icon("undo")}Desfazer</button>` : ""}
+          </div>
+        </div>
         ${state.modo === "calendario" ? calendarioHTML(r, conflitos, editavel) : listaHTML(r, conflitos, editavel)}
       </div>
     </div>
@@ -816,8 +818,6 @@ function ligarPainel(el, qual) {
     const t = e.target;
     const modo = t.closest("[data-modo]");
     if (modo) { state.modo = modo.dataset.modo; return render(); }
-    const cores = t.closest("[data-cores]");
-    if (cores) { state.cores = cores.dataset.cores; return render(); }
     const alvo = t.closest("[data-destacar], .stats-row");
     if (alvo) {
       const id = alvo.dataset.destacar || alvo.dataset.id;
@@ -1144,10 +1144,6 @@ function renderEscala() {
   $("#escala-painel").hidden = !r;
   $("#escala-acoes").hidden = !r;
   $("#banner-rascunho").hidden = !(r && state.rascunho);
-  $("#escala-sub").textContent = r
-    ? `${nomeDoPeriodo(r.periodo)}: ${fmtLonga(r.periodo.inicio)} a ${fmtLonga(r.periodo.fim)} · confirmada em ${fmtDataHora(r.confirmada_em)}. `
-      + "Clique em um nome para trocar o profissional do plantão; a troca fica registrada."
-    : "A versão confirmada, pronta para imprimir e distribuir.";
   if (!ehAdmin()) {
     $("#escala-vazia-texto").textContent = "A coordenação ainda não publicou a escala. Esta página se atualiza sozinha quando ela for confirmada.";
   }
@@ -1324,7 +1320,6 @@ function renderUsuario() {
   $("#user-papel").textContent = u.admin ? "ADM" : "";
   $("#user-avatar").textContent = iniciais(u.nome);
   $$("[data-admin]").forEach((el) => (el.hidden = !u.admin));
-  if (!u.admin) $("#hero-sub").textContent = "Consulte a escala e troque profissionais nos plantões. As mudanças aparecem para toda a equipe.";
 }
 
 $("#btn-auditoria").addEventListener("click", () => irPara(state.step === "auditoria" ? "escala" : "auditoria"));

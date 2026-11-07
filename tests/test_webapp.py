@@ -358,13 +358,38 @@ def test_confirmar_o_mesmo_periodo_substitui(client):
     assert len(client.get("/api/estado").get_json()["escalas"]) == 1
 
 
-def test_sem_escala_atual_abre_a_do_mes_seguinte(tmp_path):
+def test_so_escalas_futuras_viram_mes_atual_e_seguinte(tmp_path):
     c = _cliente(tmp_path / "dados.json", hoje=date(2026, 11, 20))
     _preparar(c)
     _confirmar(c, "2026-12-01", "2026-12-03")
     estado = c.get("/api/estado").get_json()
     assert estado["escala"]["periodo"]["inicio"] == "2026-12-01"
-    assert estado["escalas"][0]["papel"] == "seguinte"
+    assert estado["escalas"][0]["papel"] == "atual"
+    _confirmar(c, "2027-01-01", "2027-01-03")
+    papeis = [(e["periodo"]["inicio"], e["papel"]) for e in c.get("/api/estado").get_json()["escalas"]]
+    assert papeis == [("2026-12-01", "atual"), ("2027-01-01", "seguinte")]
+
+
+def test_par_so_avanca_quando_o_mes_vira_e_o_adm_confirma_a_nova():
+    from escala.repositorio import EstadoApp
+    from escala.dominio import Escala, Periodo
+
+    def esc(ano, mes):
+        return Escala(Periodo(date(ano, mes, 1), date(ano, mes, 28)), [])
+
+    def papeis(escalas, hoje):
+        e = EstadoApp(escalas=escalas)
+        return [(x.periodo.inicio.month, p) for x, p in zip(escalas, e.classificar(hoje).values())]
+
+    dez, jan, fev = esc(2026, 12), esc(2027, 1), esc(2027, 2)
+    # Novembro: dezembro e janeiro publicados.
+    assert papeis([dez, jan], date(2026, 11, 7)) == [(12, "atual"), (1, "seguinte")]
+    # Dezembro, com fevereiro já confirmado: o mês ainda não virou para janeiro.
+    assert papeis([dez, jan, fev], date(2026, 12, 20)) == [(12, "atual"), (1, "seguinte"), (2, "futura")]
+    # Virou para janeiro, mas fevereiro ainda não foi confirmado: o par não avança.
+    assert papeis([dez, jan], date(2027, 1, 5)) == [(12, "atual"), (1, "seguinte")]
+    # Virou o mês E o ADM confirmou fevereiro: janeiro vira o atual, fevereiro o seguinte.
+    assert papeis([dez, jan, fev], date(2027, 1, 5)) == [(12, "anterior"), (1, "atual"), (2, "seguinte")]
 
 
 def test_le_arquivo_com_uma_unica_escala(client, tmp_path):
@@ -381,3 +406,42 @@ def test_paginas_marcam_a_versao_dos_arquivos(client):
     html = client.get("/").data.decode("utf-8")
     v = client.get("/api/versao").get_json()["app"]
     assert f"js/app.js?v={v}" in html and f"css/style.css?v={v}" in html
+
+
+# --- retenção da auditoria -------------------------------------------------
+
+def test_auditoria_guarda_so_os_ultimos_30_dias(tmp_path):
+    import json
+    from datetime import datetime, timedelta
+    from escala.usuarios import Auditoria
+
+    agora = datetime.now().astimezone()
+    caminho = tmp_path / "auditoria.jsonl"
+    linhas = [{"quando": (agora - timedelta(days=d)).isoformat(timespec="seconds"),
+               "tipo": "LOGIN", "usuario": f"U{d}", "descricao": "", "ip": None} for d in (45, 31, 29, 1)]
+    caminho.write_text("".join(json.dumps(l) + "\n" for l in linhas) + "linha quebrada\n", encoding="utf-8")
+
+    aud = Auditoria(caminho)  # limpa ao iniciar
+    assert [e["usuario"] for e in aud.listar()] == ["U1", "U29"]
+    assert "linha quebrada" in caminho.read_text(encoding="utf-8")  # sem data: mantida
+
+    aud.registrar("LOGOUT", "Ana", "Saiu")
+    assert [e["usuario"] for e in aud.listar()] == ["Ana", "U1", "U29"]
+
+
+# --- PWA (app instalável) --------------------------------------------------
+
+def test_pwa_manifesto_e_service_worker_sao_publicos(tmp_path):
+    from webapp import create_app
+    app = create_app(tmp_path / "dados.json", tmp_path / "usuarios.json", tmp_path / "auditoria.jsonl")
+    anonimo = app.test_client()  # o navegador busca o manifesto sem a sessão
+    r = anonimo.get("/manifest.webmanifest")
+    assert r.status_code == 200 and r.mimetype == "application/manifest+json"
+    manifesto = r.get_json(force=True)
+    assert manifesto["start_url"] == "/" and manifesto["display"] == "standalone"
+    for icone in manifesto["icons"]:
+        assert anonimo.get("/" + icone["src"]).status_code == 200
+    sw = anonimo.get("/sw.js")
+    assert sw.status_code == 200 and sw.headers["Cache-Control"] == "no-cache"
+    assert "/api/" in sw.data.decode()  # a API nunca vai para o cache
+    assert anonimo.get("/offline.html").status_code == 200

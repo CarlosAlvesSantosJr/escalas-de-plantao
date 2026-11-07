@@ -47,6 +47,8 @@ spec:
               value: "1"
             - name: ESCALA_SESSAO_HORAS
               value: "12"
+            - name: ESCALA_AUDITORIA_DIAS   # auditoria guarda só os últimos N dias
+              value: "30"
             - name: ESCALA_SECRET_KEY
               valueFrom:
                 secretKeyRef:

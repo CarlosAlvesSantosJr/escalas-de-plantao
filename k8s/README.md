@@ -29,23 +29,30 @@ Há dois modos de implantação:
 
 ```bash
 kubectl config use-context docker-desktop
-docker build -t escala-plantao:1.2.0 .        # a mesma tag de newTag em tunel/kustomization.yaml
+docker build -t escala-plantao:1.4.1 .        # a mesma tag de newTag em tunel/kustomization.yaml
 kubectl apply -k k8s/tunel/
 kubectl -n escala-plantao logs deploy/cloudflared | grep trycloudflare   # endereço público
 ```
 
-**Para atualizar a versão, use sempre uma tag nova** (1.2.1, 1.3.0…). Se você
+**Para atualizar a versão, use sempre uma tag nova** (1.4.2, 1.5.0…). Se você
 reconstruir a imagem com a mesma tag, o nó do Kubernetes continua usando a
 cópia antiga que já guardou.
 
 ```bash
-docker build -t escala-plantao:1.3.0 .
-# troque newTag para "1.3.0" em k8s/tunel/kustomization.yaml
+docker build -t escala-plantao:1.5.0 .
+# troque newTag para "1.5.0" em k8s/tunel/kustomization.yaml
 kubectl apply -k k8s/tunel/
 ```
 
 Só o pod da aplicação é recriado. O túnel continua de pé, e o endereço
 público não muda.
+
+**App instalável (PWA):** pelo endereço `https://` do túnel (ou do seu
+domínio), a escala pode ser instalada no celular com "Adicionar à tela
+inicial". Sem HTTPS o navegador não oferece a instalação.
+
+**Auditoria:** guarda os últimos 30 dias (variável `ESCALA_AUDITORIA_DIAS` em
+`base/deployment.yaml`); eventos mais antigos são apagados automaticamente.
 
 **Limitações:** o sistema só fica no ar com o PC ligado e o Docker Desktop
 aberto. O endereço muda se o pod `cloudflared` reiniciar; para um endereço

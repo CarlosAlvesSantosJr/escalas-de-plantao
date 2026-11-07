@@ -4,17 +4,19 @@ Os usuários entram com o nome e a matrícula. A matrícula nunca é guardada em
 texto: o arquivo de usuários só tem o hash (gerado por `usuarios_cli.py`).
 Em produção esse arquivo vem de um Secret do Kubernetes, fora do código.
 
-A auditoria é um arquivo JSON Lines só de acréscimo: cada linha é um evento
-(login, logout, alteração de plantão, ações do administrador).
+A auditoria é um arquivo JSON Lines: cada linha é um evento (login, logout,
+alteração de plantão, ações do administrador). Eventos com mais de
+`dias_retencao` dias (padrão 30) são apagados; os últimos 30 dias ficam sempre.
 """
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 
@@ -139,9 +141,36 @@ class LimiteTentativas:
 
 
 class Auditoria:
-    def __init__(self, caminho: str | Path):
+    DIAS_RETENCAO = 30
+
+    def __init__(self, caminho: str | Path, dias_retencao: int = DIAS_RETENCAO):
         self.caminho = Path(caminho)
+        self.dias_retencao = max(1, int(dias_retencao))
         self._lock = threading.Lock()
+        self._proxima_limpeza = 0.0
+        self.expurgar()
+
+    def expurgar(self, agora: datetime | None = None) -> int:
+        """Apaga eventos com mais de `dias_retencao` dias. Devolve quantos saíram.
+
+        Linhas sem data legível são mantidas (melhor sobrar do que perder registro).
+        A reescrita é atômica: grava num arquivo temporário e troca de uma vez.
+        """
+        agora = agora or datetime.now().astimezone()
+        corte = agora - timedelta(days=self.dias_retencao)
+        with self._lock:
+            self._proxima_limpeza = time.monotonic() + 3600
+            try:
+                linhas = self.caminho.read_text(encoding="utf-8").splitlines()
+            except FileNotFoundError:
+                return 0
+            manter = [l for l in linhas if l.strip() and not _antes_de(l, corte)]
+            removidos = sum(1 for l in linhas if l.strip()) - len(manter)
+            if removidos:
+                tmp = self.caminho.with_name(self.caminho.name + ".tmp")
+                tmp.write_text("".join(l + "\n" for l in manter), encoding="utf-8")
+                os.replace(tmp, self.caminho)
+        return removidos
 
     def registrar(self, tipo: str, usuario: str | None, descricao: str, ip: str | None = None,
                   **detalhes) -> dict:
@@ -150,6 +179,8 @@ class Auditoria:
         if detalhes:
             evento["detalhes"] = detalhes
         linha = json.dumps(evento, ensure_ascii=False)
+        if time.monotonic() >= self._proxima_limpeza:  # no máximo uma limpeza por hora
+            self.expurgar()
         with self._lock:
             self.caminho.parent.mkdir(parents=True, exist_ok=True)
             with self.caminho.open("a", encoding="utf-8") as fp:
@@ -194,3 +225,14 @@ class Auditoria:
             if len(out) >= limite:
                 break
         return out
+
+
+def _antes_de(linha: str, corte: datetime) -> bool:
+    """True se o evento da linha é mais antigo que `corte`."""
+    try:
+        quando = datetime.fromisoformat(json.loads(linha)["quando"])
+    except (ValueError, KeyError, TypeError):
+        return False
+    if quando.tzinfo is None:
+        quando = quando.astimezone()
+    return quando < corte

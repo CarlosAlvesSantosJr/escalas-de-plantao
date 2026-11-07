@@ -4,7 +4,7 @@
 > Gerador automático de escalas para equipes de ambulância do SAMU: monta duplas de enfermagem e socorrista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa. A coordenação revisa e ajusta a proposta antes de publicar.
 
 **Papel:** produto, backend, frontend e UX
-**Stack:** Python 3.12 · Flask · Gunicorn · JavaScript (sem framework) · fpdf · Docker Compose · pytest · Tkinter
+**Stack:** Python 3.12 · Flask · Gunicorn · JavaScript (sem framework) · PWA · fpdf · Docker · Kubernetes · pytest · Tkinter
 
 ![Escala final com cores por profissional](img/escala.jpg)
 
@@ -43,7 +43,7 @@ Uma aplicação web em cinco etapas. A coordenação informa as restrições; o 
 | **2. Equipe** | Cadastra os profissionais por função. O painel avisa quando a equipe é pequena demais para garantir descanso. |
 | **3. Disponibilidade** | Escolhe um "pincel" (Indisponível, Preferencial, Férias) e clica ou arrasta sobre os turnos. Clicar na data marca o dia inteiro; clicar em "Seg" marca todas as segundas. Salva sozinho. |
 | **4. Revisão** | Recebe a proposta automática e ajusta à mão: clica num nome, vê quem está livre e por que os outros não estão, troca ou deixa vago. Cada ajuste é checado contra as regras na hora, e dá para desfazer. |
-| **5. Escala** | Confirma a versão final. Cada profissional ganha uma cor, e a legenda destaca os plantões de cada um. Baixa o PDF, imprime ou exporta. A escala pode ser reaberta para edição ou importada em outro computador. |
+| **5. Escala** | Confirma a versão final. Cada profissional ganha uma cor, e a legenda destaca os plantões de cada um. Baixa o PDF, imprime ou exporta (só a coordenação). A escala pode ser reaberta para edição ou importada em outro computador. |
 
 ![Disponibilidade](img/disponibilidade.jpg)
 
@@ -55,9 +55,25 @@ A coordenação pode escalar alguém com impedimento quando a exceção foi comb
 
 ![Revisão com o editor de posição](img/revisao.jpg)
 
-### O PDF para a equipe
+### A equipe troca plantões, com as regras de descanso checadas na hora
 
-Ficam publicadas ao mesmo tempo a **escala atual** e a **do mês seguinte**, em abas, para a equipe combinar trocas com antecedência. Toda troca aparece para todos em poucos segundos e fica registrada na auditoria, que só a coordenação vê.
+Depois de publicada, a escala fica com a equipe. Cada profissional entra com nome e matrícula, no celular, e pode trocar quem está num plantão. O editor é o mesmo da revisão: **"Podem assumir"** de um lado e **"Com impedimento"** do outro, com o motivo escrito. Quem saiu da NOITE anterior aparece como "Saindo do plantão da noite anterior"; quem já tem plantão no dia, como "Já tem outro plantão neste dia"; quem pegaria a NOITE tendo o DIA de amanhã, como "Tem plantão de dia logo após esta noite".
+
+A troca não espera aprovação, mas também não acontece no escuro: o servidor recusa se outra pessoa trocou a mesma posição antes, a mudança aparece em todas as telas em até 3 segundos e fica na auditoria da coordenação. O usuário não vê números de ninguém; a coordenação vê o total de plantões de cada pessoa, os conflitos e a distribuição.
+
+<table><tr>
+<td><img src="img/troca-usuario.jpg" alt="Editor de troca visto pelo usuário"></td>
+<td><img src="img/perfis-celular.jpg" alt="ADM e usuário no celular"></td>
+</tr><tr>
+<td align="center"><sub>Troca de plantão: quem pode assumir e quem tem impedimento</sub></td>
+<td align="center"><sub>Celular: coordenação (ADM) × equipe (Usuário)</sub></td>
+</tr></table>
+
+### Mês atual e mês seguinte
+
+A equipe vê sempre duas escalas, em abas. O par só avança quando o mês vira **e** a coordenação confirma a escala nova: com Dezembro e Janeiro publicados, Dezembro segue como "Mês atual" até que, já em janeiro, Fevereiro seja confirmado.
+
+### O PDF para a equipe
 
 Uma página por mês, com uma linha por dia: **DIA** à esquerda e **NOITE** à direita, cada um com **Enfermagem** e **Socorrista**. Cada pessoa tem a mesma cor da tela, para achar os próprios plantões de relance. O resumo de plantões por profissional fica só no sistema.
 
@@ -168,12 +184,13 @@ flowchart LR
 | `escala/relatorio_pdf.py` | PDF com DIA e NOITE lado a lado, com os dados embutidos para reimportar |
 | `webapp.py` | API REST Flask e frontend em `static/` |
 | `app.py` | Versão desktop, usando o mesmo núcleo |
-| `tests/` | 31 testes de regras e da API |
+| `tests/` | 48 testes de regras, da API, dos perfis, do mês atual/seguinte, da auditoria e do PWA |
 
-### API
+### API e documentação técnica
 
-| Método | Rota | Função |
-|---|---|---|
+A API REST tem cerca de 25 rotas, e cada uma diz que perfil pode usá-la (as da equipe são só: ver a escala, ver candidatos e trocar um plantão). A referência completa, com **UML de classes, diagramas de sequência do login e da troca de plantão, ciclo de vida da escala e matriz de permissões**, está em [ARQUITETURA.md](ARQUITETURA.md).
+
+---|---|---|
 | `GET` | `/api/estado` | Período, equipe, rascunho e escala final |
 | `PUT` | `/api/periodo` | Define o período (até 92 dias) |
 | `POST` / `PUT` / `DELETE` | `/api/funcionarios[/<id>]` | Cadastro da equipe |
@@ -217,13 +234,16 @@ Comparação entre o algoritmo original e o novo, rodando sobre a disponibilidad
 - **Frontend sem build.** HTML, CSS e JavaScript puros, servidos pelo Flask. Não há Node nem bundler para manter.
 - **JSON em vez de banco.** Para uma base com uma coordenação, um arquivo legível basta, é fácil de copiar como backup e é compatível com a versão anterior.
 - **Container enxuto e seguro.** Imagem `python:3.12-slim` (cerca de 190 MB), usuário sem privilégios, healthcheck, porta exposta só para o próprio computador e dados num volume.
-- **UX para quem usa.** Pincel com arrastar, atalhos de teclado de 1 a 4, layout que funciona no celular e a identidade visual do SAMU.
+- **UX para quem usa.** Pincel com arrastar, atalhos de teclado de 1 a 4, a identidade visual do SAMU e um layout pensado para o celular: escala em cartões por dia, símbolo do SAMU sempre visível no topo, previsão do tempo de Tubarão-SC e instalação como app (PWA).
+- **Auditoria com prazo.** Os eventos ficam 30 dias e depois são apagados automaticamente, numa reescrita atômica do arquivo; o prazo é configurável.
 - **Proposta, não imposição.** O algoritmo sugere; a coordenação decide. A revisão avisa, mas não bloqueia: uma exceção combinada com a equipe vira um conflito visível em vez de um obstáculo.
 - **Uma única fonte de regras.** A mesma avaliação (`avaliacao.py`) mede a escala gerada e a editada à mão. Não existe uma regra no algoritmo e outra na tela.
 - **Rascunho separado da escala final.** Editar não mexe na versão publicada até a confirmação, e dá para descartar a edição.
 - **O PDF é o arquivo de troca.** Os dados vão embutidos no PDF que a equipe já recebe. A coordenação não precisa guardar um segundo arquivo para reabrir a escala depois.
 - **Cor como apoio, não como único sinal.** Cada profissional tem uma cor, mas o nome e a função estão sempre escritos, com texto escuro sobre fundo claro. Quem não distingue cores lê a escala do mesmo jeito.
-- **Privacidade da equipe.** O resumo de plantões por pessoa serve à coordenação e fica fora do PDF e da impressão.
+- **Privacidade da equipe.** O resumo de plantões por pessoa serve à coordenação e fica fora do PDF e da impressão. O servidor nem envia ao perfil Usuário os indicadores, os conflitos, a disponibilidade dos colegas e o total de plantões de cada um.
+- **Permissão no servidor, não só na tela.** Esconder um botão não basta: as rotas da coordenação respondem 403 ao perfil Usuário, e cada resposta é filtrada pelo perfil.
+- **Concorrência sem banco.** Cada troca leva quem o cliente viu na posição; se mudou, o servidor recusa (409) em vez de sobrescrever. As telas consultam uma rota leve de versão a cada 3 segundos.
 
 ---
 
@@ -240,6 +260,7 @@ No Windows, basta um duplo clique em `iniciar.bat`. Veja o [guia de instalação
 
 ## 9. Próximos passos
 
-- Troca de plantão entre profissionais, com aprovação da coordenação.
-- Login e várias bases do SAMU no mesmo sistema.
+- Aprovação opcional da coordenação para trocas feitas pela equipe.
+- Várias bases do SAMU no mesmo sistema.
+- Endereço fixo (túnel nomeado ou domínio próprio) para o app instalado.
 - Envio da escala por WhatsApp ou e-mail.

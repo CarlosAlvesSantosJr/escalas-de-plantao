@@ -11,6 +11,7 @@ import csv
 import hashlib
 import io
 import json
+import mimetypes
 import os
 import secrets
 from datetime import date, datetime, timedelta
@@ -34,6 +35,8 @@ EVENTOS_DA_ESCALA = {"PLANTAO_ALTERADO", "ESCALA_CONFIRMADA"}
 DOW = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 
 # Rotas acessíveis sem login.
+mimetypes.add_type("application/manifest+json", ".webmanifest")  # PWA
+
 ROTAS_PUBLICAS = {"/login", "/login.html", "/api/login", "/saude"}
 # Rotas da API liberadas para o perfil USUARIO (o resto exige ADMIN).
 API_USUARIO = {("GET", "/api/eu"), ("POST", "/api/logout"), ("GET", "/api/versao"),
@@ -146,7 +149,7 @@ def _versao_da_tela() -> str:
     """Impressão digital dos arquivos da tela. Muda a cada versão nova publicada:
     as telas abertas percebem e recarregam sozinhas (não ficam com o JS antigo)."""
     h = hashlib.sha1()
-    for nome in ("index.html", "login.html", "js/app.js", "js/login.js", "css/style.css"):
+    for nome in ("index.html", "login.html", "js/app.js", "js/login.js", "js/clima.js", "css/style.css"):
         arquivo = BASE_DIR / "static" / nome
         if arquivo.exists():
             h.update(arquivo.read_bytes())
@@ -190,13 +193,13 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
     def pagina(nome: str) -> Response:
         """Serve a página com os arquivos marcados pela versão (evita cache de JS/CSS antigos)."""
         html = (BASE_DIR / "static" / nome).read_text(encoding="utf-8")
-        for ref in ("css/style.css", "js/app.js", "js/login.js"):
+        for ref in ("css/style.css", "js/app.js", "js/login.js", "js/clima.js"):
             html = html.replace(f'"{ref}"', f'"{ref}?v={versao_tela}"')
         return Response(html, mimetype="text/html")
 
     repo = RepositorioJSON(caminho_dados)
     cadastro = CadastroUsuarios(caminho_usuarios)
-    auditoria = Auditoria(caminho_auditoria)
+    auditoria = Auditoria(caminho_auditoria, int(os.environ.get("ESCALA_AUDITORIA_DIAS", Auditoria.DIAS_RETENCAO)))
     tentativas = LimiteTentativas()
     def registrar(tipo: str, descricao: str, **detalhes) -> None:
         usuario = g.usuario.nome if getattr(g, "usuario", None) else detalhes.pop("usuario", None)
@@ -236,6 +239,8 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
         resp.headers.setdefault("Referrer-Policy", "same-origin")
         if request.path.startswith("/api/") or request.path in ("/", "/index.html", "/login"):
             resp.headers["Cache-Control"] = "no-store"
+        elif request.path == "/sw.js":  # o navegador sempre confere se há service worker novo
+            resp.headers["Cache-Control"] = "no-cache"
         return resp
 
     def usuario_json(u: Usuario) -> dict:
