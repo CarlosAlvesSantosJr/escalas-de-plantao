@@ -42,7 +42,6 @@ const state = {
   dadosMudaram: false,  // equipe ou disponibilidade mudou depois da proposta
   recarregar: false,    // escalas precisam ser reavaliadas pelo servidor
   modo: matchMedia("(max-width: 760px)").matches ? "lista" : "calendario",
-  cores: "profissional",   // sempre uma cor por profissional (o seletor saiu da tela)
   destaque: null,
 };
 
@@ -783,7 +782,7 @@ function renderPainel(el, r, editavel, alvo = "rascunho") {
     ${ehAdmin() ? `<div class="kpis">${kpisHTML(r, editavel)}</div>
     <div class="alerts">${alertasHTML(r, editavel, alvo)}</div>` : ""}
     <div class="card card--flush">
-      <div class="escala-area cores-${state.cores}" data-escala>
+      <div class="escala-area" data-escala>
         ${legendaHTML(r, editavel)}
         <div class="toolbar toolbar--modo">
           <div class="tabs" role="tablist" aria-label="Visualização">${tabs("modo", "selected", [["calendario", "Calendário"], ["lista", "Lista"]], state.modo)}</div>
