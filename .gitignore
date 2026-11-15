@@ -4,14 +4,19 @@ __pycache__/
 
 # Dados locais e arquivos gerados
 dados/
+dados_escala.json
 dados_escala.backup.json
 escala_emergencia.pdf
 escala_samu_*.pdf
 
 # Segredos do Kubernetes (usuários e chave de sessão)
 k8s/base/segredos/
+k8s/tunel-fixo/segredos/
 
 # Gerados pela aplicação quando roda fora do Docker
 .secret_key
 auditoria.jsonl
 /usuarios.json
+
+.vercel
+.env*

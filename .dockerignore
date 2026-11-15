@@ -6,7 +6,6 @@ dados
 *.json
 *.pdf
 app.py
-escalas-de-plantao
 docs
 *.bat
 *.sh

@@ -1,7 +1,6 @@
 # Túnel rápido da Cloudflare (sem conta): o endereço público aparece no log
-# e MUDA sempre que este pod reinicia. Para um endereço fixo, crie um túnel
-# nomeado na sua conta Cloudflare e troque os args por:
-#   ["tunnel", "--no-autoupdate", "run", "--token", "$(TUNNEL_TOKEN)"]
+# e MUDA sempre que este pod reinicia. Para um endereço fixo no seu domínio,
+# use k8s/tunel-fixo/ (túnel nomeado; veja k8s/README.md).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

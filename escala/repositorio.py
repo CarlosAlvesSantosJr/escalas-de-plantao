@@ -164,6 +164,30 @@ def escala_de_dict(dados: dict, funcionarios: list[Funcionario],
     return Escala(periodo, plantoes, datetime.fromisoformat(confirmada) if confirmada else None), novos
 
 
+def estado_de_dados(dados: dict) -> EstadoApp:
+    """Monta o estado a partir do dicionário salvo (arquivo JSON ou banco)."""
+    funcionarios = [_funcionario_de_dict(i) for i in dados.get("funcionarios", [])]
+    rascunho = escala_de_dict(dados["rascunho"], funcionarios)[0] if dados.get("rascunho") else None
+    # Formato atual: lista "escalas". Formato antigo: uma única "escala".
+    brutas = dados.get("escalas") or ([dados["escala"]] if dados.get("escala") else [])
+    escalas = sorted((escala_de_dict(d, funcionarios)[0] for d in brutas), key=lambda e: e.periodo.inicio)
+    return EstadoApp(
+        funcionarios=funcionarios,
+        periodo=periodo_de_dict(dados["periodo"]) if dados.get("periodo") else None,
+        rascunho=rascunho,
+        escalas=escalas,
+    )
+
+
+def dados_de_estado(estado: EstadoApp) -> dict:
+    return {
+        "periodo": periodo_para_dict(estado.periodo) if estado.periodo else None,
+        "funcionarios": [_funcionario_para_dict(f) for f in estado.funcionarios],
+        "rascunho": escala_para_dict(estado.rascunho) if estado.rascunho else None,
+        "escalas": [escala_para_dict(e) for e in estado.escalas],
+    }
+
+
 class RepositorioJSON:
     def __init__(self, caminho: str | Path):
         self.caminho = Path(caminho)
@@ -173,26 +197,18 @@ class RepositorioJSON:
         if not self.caminho.exists():
             return EstadoApp()
         with self.caminho.open(encoding="utf-8") as fp:
-            dados = json.load(fp)
-        funcionarios = [_funcionario_de_dict(i) for i in dados.get("funcionarios", [])]
-        rascunho = escala_de_dict(dados["rascunho"], funcionarios)[0] if dados.get("rascunho") else None
-        # Formato atual: lista "escalas". Formato antigo: uma única "escala".
-        brutas = dados.get("escalas") or ([dados["escala"]] if dados.get("escala") else [])
-        escalas = sorted((escala_de_dict(d, funcionarios)[0] for d in brutas), key=lambda e: e.periodo.inicio)
-        return EstadoApp(
-            funcionarios=funcionarios,
-            periodo=periodo_de_dict(dados["periodo"]) if dados.get("periodo") else None,
-            rascunho=rascunho,
-            escalas=escalas,
-        )
+            return estado_de_dados(json.load(fp))
+
+    def versao(self) -> str:
+        """Muda a cada gravação (as telas abertas percebem e recarregam)."""
+        try:
+            st = self.caminho.stat()
+            return f"{st.st_mtime_ns}-{st.st_size}"
+        except FileNotFoundError:
+            return "0"
 
     def salvar(self, estado: EstadoApp) -> None:
-        dados = {
-            "periodo": periodo_para_dict(estado.periodo) if estado.periodo else None,
-            "funcionarios": [_funcionario_para_dict(f) for f in estado.funcionarios],
-            "rascunho": escala_para_dict(estado.rascunho) if estado.rascunho else None,
-            "escalas": [escala_para_dict(e) for e in estado.escalas],
-        }
+        dados = dados_de_estado(estado)
         self.caminho.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=self.caminho.parent, suffix=".tmp")
         try:

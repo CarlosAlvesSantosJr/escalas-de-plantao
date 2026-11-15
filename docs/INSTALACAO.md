@@ -1,6 +1,11 @@
 # Como instalar a Escala de Plantão
 
-Este guia é para usar o sistema no seu computador. Não precisa saber programar.
+> **A equipe não precisa instalar nada.** O sistema está no ar em
+> **[minhaescala192.vercel.app](https://minhaescala192.vercel.app)**: é só abrir no celular ou no
+> computador e entrar com nome e matrícula. No celular, use "Adicionar à tela inicial" para
+> instalar como app.
+
+Este guia é para rodar uma **cópia própria** do sistema no seu computador, com Docker. Não precisa saber programar.
 
 ## Antes de começar (só na primeira vez)
 

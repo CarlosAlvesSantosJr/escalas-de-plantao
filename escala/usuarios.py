@@ -22,6 +22,8 @@ from pathlib import Path
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from .relogio import agora as _agora
+
 
 class Papel(str, Enum):
     ADMIN = "ADMIN"
@@ -156,7 +158,7 @@ class Auditoria:
         Linhas sem data legível são mantidas (melhor sobrar do que perder registro).
         A reescrita é atômica: grava num arquivo temporário e troca de uma vez.
         """
-        agora = agora or datetime.now().astimezone()
+        agora = agora or _agora()
         corte = agora - timedelta(days=self.dias_retencao)
         with self._lock:
             self._proxima_limpeza = time.monotonic() + 3600
@@ -174,7 +176,7 @@ class Auditoria:
 
     def registrar(self, tipo: str, usuario: str | None, descricao: str, ip: str | None = None,
                   **detalhes) -> dict:
-        evento = {"quando": datetime.now().astimezone().isoformat(timespec="seconds"),
+        evento = {"quando": _agora().isoformat(timespec="seconds"),
                   "tipo": tipo, "usuario": usuario, "descricao": descricao, "ip": ip}
         if detalhes:
             evento["detalhes"] = detalhes

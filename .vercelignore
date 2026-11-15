@@ -1,0 +1,18 @@
+# Nada de dados reais, segredos ou arquivos que não fazem parte do app web.
+dados/
+dados_escala*.json
+usuarios.json
+auditoria.jsonl
+.secret_key
+*.pdf
+k8s/
+docs/
+tests/
+linkedin/
+__pycache__/
+.pytest_cache/
+app.py
+iniciar.*
+parar.bat
+docker-compose.yml
+Dockerfile
