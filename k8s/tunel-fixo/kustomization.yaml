@@ -1,0 +1,26 @@
+# Kubernetes no próprio PC (Docker Desktop) + túnel NOMEADO da Cloudflare:
+# endereço fixo no seu domínio. Passo a passo em k8s/README.md
+# ("Endereço fixo com túnel nomeado").
+#
+#   docker build -t escala-plantao:1.4.1 .     (mesma tag de newTag, abaixo)
+#   kubectl apply -k k8s/tunel-fixo/
+#   kubectl -n escala-plantao rollout status deploy/cloudflared
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: escala-plantao
+
+resources:
+  - ../base
+  - cloudflared.yaml
+
+# Token do túnel, fora do Git (veja .gitignore). Crie o arquivo com uma linha:
+#   TUNNEL_TOKEN=eyJhIjoi...
+secretGenerator:
+  - name: cloudflared-token
+    envs:
+      - segredos/tunel.env
+
+images:
+  - name: escala-plantao
+    newName: escala-plantao
+    newTag: "1.4.1"   # troque a cada versão nova (a mesma de k8s/tunel/)

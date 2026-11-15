@@ -203,7 +203,7 @@ docker compose up -d --build        # http://localhost:8080 · dados em ./dados
 
 No Windows, basta um duplo clique em `iniciar.bat` (e `parar.bat` para desligar). Veja o [guia de instalação](docs/INSTALACAO.md).
 
-**Kubernetes:** os manifests estão em [`k8s/`](k8s/): 1 réplica, disco persistente, usuários num Secret, pod sem root com sistema de arquivos somente leitura. Dois modos: no próprio PC com Cloudflare Tunnel (endereço `https://…trycloudflare.com`) ou na nuvem/VPS com HTTPS do Let's Encrypt. Passo a passo em **[k8s/README.md](k8s/README.md)**.
+**Kubernetes:** os manifests estão em [`k8s/`](k8s/): 1 réplica, disco persistente, usuários num Secret, pod sem root com sistema de arquivos somente leitura. Três modos: no próprio PC com Cloudflare Tunnel, com endereço temporário (`https://…trycloudflare.com`) ou fixo no seu domínio (túnel nomeado, `k8s/tunel-fixo/`), ou na nuvem/VPS com HTTPS do Let's Encrypt. Passo a passo em **[k8s/README.md](k8s/README.md)**.
 
 ## 🧠 Como o algoritmo decide
 

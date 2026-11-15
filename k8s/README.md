@@ -19,6 +19,7 @@ Há dois modos de implantação:
 | Pasta | Onde roda | Endereço |
 |---|---|---|
 | `k8s/tunel/` | Kubernetes do Docker Desktop, **no próprio PC** | `https://xxxx.trycloudflare.com` (muda se o túnel reiniciar) |
+| `k8s/tunel-fixo/` | Kubernetes do Docker Desktop, **no próprio PC** | `https://escala.seudominio.com.br` (**fixo**, túnel nomeado) |
 | `k8s/` | Nuvem ou VPS, no ar 24 h | Seu domínio, com HTTPS do Let's Encrypt |
 
 ## Modo rápido: no próprio PC com Cloudflare Tunnel
@@ -56,10 +57,80 @@ inicial". Sem HTTPS o navegador não oferece a instalação.
 
 **Limitações:** o sistema só fica no ar com o PC ligado e o Docker Desktop
 aberto. O endereço muda se o pod `cloudflared` reiniciar; para um endereço
-fixo, use um túnel nomeado da sua conta Cloudflare (veja os comentários em
-`tunel/cloudflared.yaml`). Os dados ficam no disco do Kubernetes do Docker
+fixo, use o túnel nomeado (próxima seção). Os dados ficam no disco do Kubernetes do Docker
 Desktop, e um "Reset Kubernetes cluster" os apaga, então faça backup
 (seção "Dia a dia").
+
+## Endereço fixo com túnel nomeado (recomendado)
+
+O endereço `trycloudflare.com` muda sempre que o túnel reinicia. Quando isso
+acontece, o app instalado no celular da equipe deixa de abrir. Com um **túnel
+nomeado**, o endereço fica fixo (ex.: `https://escala.seudominio.com.br`) e
+sobrevive a reinícios do pod, do Docker e do PC.
+
+**Pré-requisitos:** uma conta gratuita na Cloudflare e **um domínio** usando os
+servidores DNS da Cloudflare. O túnel é gratuito, mas a Cloudflare não dá
+subdomínio grátis para túnel nomeado. Um `.com.br` no registro.br custa cerca
+de R$ 40/ano. Também dá para comprar o domínio direto pela Cloudflare
+(Domain Registration), a preço de custo.
+
+### 1. Domínio na Cloudflare (uma vez)
+
+1. Crie a conta em https://dash.cloudflare.com/sign-up (plano Free).
+2. **Add a domain** → digite o domínio → plano **Free**.
+3. A Cloudflare mostra dois *nameservers* (ex.: `ana.ns.cloudflare.com`).
+   No registro.br: **Domínio → DNS → Alterar servidores DNS** e cole os dois.
+   A ativação leva de minutos a algumas horas; a Cloudflare avisa por e-mail.
+
+### 2. Criar o túnel (uma vez)
+
+1. No painel: **Zero Trust → Networks → Tunnels → Create a tunnel**.
+2. Tipo **Cloudflared**, nome `escala-plantao` → **Save tunnel**.
+3. Na tela de instalação, escolha **Docker** e copie só o token
+   (o texto longo depois de `--token`, começando por `eyJ`).
+4. **Next** → aba **Public Hostname** → **Add a public hostname**:
+
+| Campo | Valor |
+|---|---|
+| Subdomain | `escala` |
+| Domain | seu domínio |
+| Service → Type | `HTTP` |
+| Service → URL | `escala.escala-plantao.svc.cluster.local:80` |
+
+5. **Save hostname**. A Cloudflare cria sozinha o registro DNS e o certificado HTTPS.
+
+### 3. Subir no Kubernetes
+
+Guarde o token num arquivo fora do Git (a pasta está no `.gitignore`):
+
+```bash
+mkdir -p k8s/tunel-fixo/segredos
+echo "TUNNEL_TOKEN=eyJhIjoi...cole-o-token-aqui" > k8s/tunel-fixo/segredos/tunel.env
+
+kubectl config use-context docker-desktop
+docker build -t escala-plantao:1.4.1 .        # a mesma tag de newTag em tunel-fixo/kustomization.yaml
+kubectl apply -k k8s/tunel-fixo/
+kubectl -n escala-plantao rollout status deploy/cloudflared
+```
+
+O `tunel-fixo` **substitui** o túnel rápido (o Deployment tem o mesmo nome),
+então não rode os dois. No painel da Cloudflare, o túnel deve aparecer como
+**HEALTHY**. Abra `https://escala.seudominio.com.br`.
+
+Daqui para frente, **use sempre `k8s/tunel-fixo/`** nas atualizações de versão
+(troque `newTag` nele). Para voltar ao endereço temporário, rode
+`kubectl apply -k k8s/tunel/`.
+
+**Na troca, a equipe reinstala o app uma última vez:** o app instalado está
+preso ao endereço antigo. Cada pessoa abre o endereço novo, faz login e
+"Adicionar à tela inicial". Depois disso, o endereço não muda mais.
+
+**Se o token vazar:** no painel do túnel, **Refresh token** (o antigo para de
+valer), atualize o `tunel.env` e rode `kubectl apply -k k8s/tunel-fixo/` de novo.
+
+**Diagnóstico:** `kubectl -n escala-plantao logs deploy/cloudflared` deve mostrar
+`Registered tunnel connection`. O pod só fica *Ready* quando está conectado à
+Cloudflare. Se a conexão cair por cerca de 2 minutos, o Kubernetes o reinicia.
 
 ## Modo nuvem/VPS
 
