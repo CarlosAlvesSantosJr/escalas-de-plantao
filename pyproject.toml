@@ -1,0 +1,15 @@
+# Usado pela Vercel (o app de desktop e o Docker continuam com os requirements*.txt).
+[project]
+name = "escalas-de-plantao"
+version = "1.5.0"
+description = "Escala de plantão do SAMU 192 (Flask) com dados no Postgres para rodar na Vercel"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=2.3,<4",
+    "fpdf>=1.7,<2",
+    "psycopg[binary]>=3.2,<4",
+    "tzdata",
+]
+
+[tool.vercel]
+entrypoint = "vercel_app:app"

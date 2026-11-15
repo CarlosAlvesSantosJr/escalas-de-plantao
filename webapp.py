@@ -14,7 +14,7 @@ import json
 import mimetypes
 import os
 import secrets
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from functools import wraps
 from pathlib import Path
 
@@ -22,6 +22,7 @@ from flask import Flask, Response, g, jsonify, redirect, request, session
 
 from escala.algoritmo import gerar_escala
 from escala.avaliacao import ResultadoEscala, avaliar_escala, candidatos
+from escala import relogio
 from escala.dominio import Cargo, Escala, Funcionario, Periodo, Status, Turno, normalizar_nome
 from escala.relatorio_pdf import gerar_pdf, ler_dados_embutidos
 from escala.repositorio import (EstadoApp, RepositorioJSON, escala_de_dict, escala_para_dict,
@@ -162,29 +163,41 @@ def _ligado(var: str) -> bool:
 
 # --- aplicação ----------------------------------------------------------
 
+def url_do_banco() -> str | None:
+    """Endereço do Postgres (a integração Neon da Vercel cria DATABASE_URL)."""
+    return os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL") or None
+
+
 def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | Path | None = None,
-               caminho_auditoria: str | Path | None = None) -> Flask:
+               caminho_auditoria: str | Path | None = None, banco_url: str | None = None) -> Flask:
+    # Modo banco (Vercel/Neon): sem caminho de arquivo informado e com DATABASE_URL definida.
+    banco_url = banco_url or (None if caminho_dados else url_do_banco())
+    banco = None
+    if banco_url:
+        from escala.banco import Banco
+        banco = Banco(banco_url)
     caminho_dados = Path(caminho_dados or os.environ.get("ESCALA_DADOS") or BASE_DIR / "dados_escala.json")
     pasta = caminho_dados.parent
     caminho_usuarios = caminho_usuarios or os.environ.get("ESCALA_USUARIOS") or pasta / "usuarios.json"
     caminho_auditoria = caminho_auditoria or os.environ.get("ESCALA_AUDITORIA") or pasta / "auditoria.jsonl"
 
+    na_vercel = bool(os.environ.get("VERCEL"))  # a Vercel define VERCEL=1 nas funções
     app = Flask(__name__, static_folder=str(BASE_DIR / "static"), static_url_path="")
     app.config.update(
         MAX_CONTENT_LENGTH=5 * 1024 * 1024,
-        SECRET_KEY=_segredo(pasta),
+        SECRET_KEY=os.environ.get("ESCALA_SECRET_KEY") or (banco.chave_sessao() if banco else _segredo(pasta)),
         SESSION_COOKIE_NAME="escala_sessao",
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=_ligado("ESCALA_COOKIE_SEGURO"),
+        SESSION_COOKIE_SECURE=_ligado("ESCALA_COOKIE_SEGURO") or na_vercel,
         PERMANENT_SESSION_LIFETIME=timedelta(hours=int(os.environ.get("ESCALA_SESSAO_HORAS", "12"))),
     )
-    if _ligado("ESCALA_ATRAS_DE_PROXY"):
+    if _ligado("ESCALA_ATRAS_DE_PROXY") or na_vercel:
         # Atrás do Ingress: usa o IP real do cliente e o esquema (https) originais.
         from werkzeug.middleware.proxy_fix import ProxyFix
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-    app.config.setdefault("HOJE", date.today)  # trocado nos testes
+    app.config.setdefault("HOJE", relogio.hoje)  # trocado nos testes
     versao_tela = _versao_da_tela()
 
     def hoje() -> date:
@@ -197,10 +210,22 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
             html = html.replace(f'"{ref}"', f'"{ref}?v={versao_tela}"')
         return Response(html, mimetype="text/html")
 
-    repo = RepositorioJSON(caminho_dados)
-    cadastro = CadastroUsuarios(caminho_usuarios)
-    auditoria = Auditoria(caminho_auditoria, int(os.environ.get("ESCALA_AUDITORIA_DIAS", Auditoria.DIAS_RETENCAO)))
-    tentativas = LimiteTentativas()
+    dias_auditoria = int(os.environ.get("ESCALA_AUDITORIA_DIAS", Auditoria.DIAS_RETENCAO))
+    if banco:
+        from escala.banco import AuditoriaPostgres, CadastroPostgres, LimitePostgres, RepositorioPostgres
+        repo = RepositorioPostgres(banco)
+        cadastro = CadastroPostgres(banco)
+        auditoria = AuditoriaPostgres(banco, dias_auditoria)
+        tentativas = LimitePostgres(banco)
+    else:
+        repo = RepositorioJSON(caminho_dados)
+        cadastro = CadastroUsuarios(caminho_usuarios)
+        auditoria = Auditoria(caminho_auditoria, dias_auditoria)
+        tentativas = LimiteTentativas()
+    # Consulta de mudanças: na Vercel cada consulta conta no limite do plano grátis,
+    # então ela é mais espaçada e para enquanto a aba está escondida.
+    intervalo_ms = int(os.environ.get("ESCALA_INTERVALO_MS", 10000 if na_vercel else 3000))
+    pausar_oculta = _ligado("ESCALA_PAUSAR_OCULTA") or na_vercel
     def registrar(tipo: str, descricao: str, **detalhes) -> None:
         usuario = g.usuario.nome if getattr(g, "usuario", None) else detalhes.pop("usuario", None)
         auditoria.registrar(tipo, usuario, descricao, request.remote_addr, **detalhes)
@@ -295,11 +320,7 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
     @app.get("/api/versao")
     def versao():
         """Consulta leve feita a cada poucos segundos para manter as telas atualizadas."""
-        try:
-            st = caminho_dados.stat()
-            v = f"{st.st_mtime_ns}-{st.st_size}"
-        except FileNotFoundError:
-            v = "0"
+        v = repo.versao()
         # Última mudança na escala confirmada: as telas avisam quem alterou o quê.
         ultima = auditoria.ultimo(EVENTOS_DA_ESCALA)
         if ultima:  # o IP fica só na auditoria do ADM
@@ -307,7 +328,8 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
         # `usuario`: dono da sessão. Se outra pessoa entrar no mesmo navegador, o cookie
         # muda para todas as abas; a tela compara e recarrega com o perfil certo.
         # `app`: versão da tela; se mudou (nova versão publicada), a página recarrega.
-        return jsonify(versao=v, ultima=ultima, usuario=g.usuario.nome, app=versao_tela)
+        return jsonify(versao=v, ultima=ultima, usuario=g.usuario.nome, app=versao_tela,
+                       intervalo=intervalo_ms, pausar_oculta=pausar_oculta)
 
     # --- persistência -----------------------------------------------------
 
@@ -568,7 +590,7 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
     def confirmar_escala(estado: EstadoApp):
         """Confirma o rascunho em revisão como a escala final."""
         rascunho = exigir_rascunho(estado)
-        rascunho.confirmada_em = datetime.now()
+        rascunho.confirmada_em = relogio.agora().replace(tzinfo=None, second=0, microsecond=0)
         substituidas = estado.publicar(rascunho)  # a de mesmo período é trocada; as outras ficam
         estado.rascunho = None
         extra = (" (substituiu a versão anterior)" if substituidas else "")
@@ -660,7 +682,7 @@ def create_app(caminho_dados: str | Path | None = None, caminho_usuarios: str | 
         for ev in _eventos():
             w.writerow([ev.get("quando"), ev.get("usuario") or "", ev.get("tipo"),
                         ev.get("descricao"), ev.get("ip") or ""])
-        nome = f"auditoria_escala_{datetime.now():%Y%m%d_%H%M}.csv"
+        nome = f"auditoria_escala_{relogio.agora():%Y%m%d_%H%M}.csv"
         # BOM para o Excel abrir os acentos corretamente.
         return _download("﻿" + saida.getvalue(), "text/csv; charset=utf-8", nome)
 

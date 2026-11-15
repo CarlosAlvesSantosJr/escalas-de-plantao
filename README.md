@@ -205,6 +205,8 @@ No Windows, basta um duplo clique em `iniciar.bat` (e `parar.bat` para desligar)
 
 **Kubernetes:** os manifests estão em [`k8s/`](k8s/): 1 réplica, disco persistente, usuários num Secret, pod sem root com sistema de arquivos somente leitura. Três modos: no próprio PC com Cloudflare Tunnel, com endereço temporário (`https://…trycloudflare.com`) ou fixo no seu domínio (túnel nomeado, `k8s/tunel-fixo/`), ou na nuvem/VPS com HTTPS do Let's Encrypt. Passo a passo em **[k8s/README.md](k8s/README.md)**.
 
+**Vercel + Neon (teste, ramo `vercel-neon`):** roda sem PC ligado, com os dados num Postgres gratuito da Neon em vez de arquivos. O app escolhe o modo sozinho pela variável `DATABASE_URL`. Passo a passo em **[docs/VERCEL.md](docs/VERCEL.md)**.
+
 ## 🧠 Como o algoritmo decide
 
 **Regras que nunca são violadas:**

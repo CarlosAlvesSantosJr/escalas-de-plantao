@@ -20,7 +20,7 @@ const VERSAO_TELA = new URL(import.meta.url).searchParams.get("v");
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto",
                "Setembro", "Outubro", "Novembro", "Dezembro"];
 const PAPEIS = { atual: "Mês atual", seguinte: "Mês seguinte", anterior: "Anterior", futura: "Futura" };
-const INTERVALO_ATUALIZACAO = 3000; // ms entre consultas de mudanças feitas por outras pessoas
+const INTERVALO_ATUALIZACAO = 3000; // ms entre consultas de mudanças (o servidor pode pedir outro)
 
 const state = {
   usuario: null,        // { nome, papel, admin }
@@ -1214,7 +1214,8 @@ $("#audit-categoria").addEventListener("change", renderAuditoria);
 // A cada poucos segundos pergunta ao servidor se os dados mudaram (consulta leve).
 // Se mudaram, recarrega e avisa quem fez a alteração.
 
-const vivo = { versao: null, ultimoEvento: null, falhas: 0, rodando: false, ocultaDesde: null };
+const vivo = { versao: null, ultimoEvento: null, falhas: 0, rodando: false, ocultaDesde: null,
+  intervalo: INTERVALO_ATUALIZACAO, pausarOculta: false };
 const chaveEvento = (ev) => ev && `${ev.quando}|${ev.usuario}|${ev.descricao}`;
 const RECARREGAR_APOS_OCULTA = 2 * 60 * 1000; // aba escondida por mais tempo volta com a página recarregada
 
@@ -1231,6 +1232,7 @@ function setAoVivo(ok) {
 
 async function verificarAtualizacoes() {
   if (vivo.rodando) return; // intervalo, foco e volta da aba podem disparar juntos
+  if (vivo.pausarOculta && document.hidden) return; // na nuvem: não consulta com a aba escondida
   vivo.rodando = true;
   try {
     await verificar();
@@ -1244,6 +1246,8 @@ async function verificar() {
   try {
     v = await api("GET", "api/versao");
     vivo.falhas = 0;
+    if (v.intervalo) vivo.intervalo = Math.max(1000, v.intervalo);
+    vivo.pausarOculta = !!v.pausar_oculta;
     setAoVivo(true);
   } catch {
     if (++vivo.falhas >= 2) setAoVivo(false);
@@ -1294,8 +1298,10 @@ function avisarMudanca(ev) {
 }
 
 function iniciarAtualizacaoAutomatica() {
-  // Continua rodando com a aba em segundo plano (o navegador só espaça as consultas).
-  setInterval(verificarAtualizacoes, INTERVALO_ATUALIZACAO);
+  // Continua rodando com a aba em segundo plano (o navegador só espaça as consultas),
+  // exceto quando o servidor pede para pausar (Vercel). O intervalo vem do servidor.
+  const proxima = () => setTimeout(async () => { await verificarAtualizacoes(); proxima(); }, vivo.intervalo);
+  proxima();
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) { vivo.ocultaDesde = Date.now(); return; }
     const longe = vivo.ocultaDesde && Date.now() - vivo.ocultaDesde > RECARREGAR_APOS_OCULTA;
