@@ -484,6 +484,8 @@ arquivos (`banco_cli.py baixar`), que abrem no Docker sem conversão.
   os arquivos com a versão (`?v=…`) e recarrega sozinha quando uma versão nova é publicada.
 - **Responsivo**: até 760 px a escala abre em lista, com um cartão por dia; o topo deixa o
   símbolo do SAMU à esquerda e põe as informações numa coluna à direita.
+- **Identidade visual**: logo SAMU 192 Tubarão (`img/samu-logo.png`) num cartão branco no login e
+  no topo, nítida em qualquer tela; o selo do login e os ícones do PWA vêm do emblema (`img/samu-emblema.png`).
 - **Previsão do tempo** (`js/clima.js`): Open-Meteo, sem chave, cidade fixa Tubarão-SC,
   atualização a cada 30 min; se falhar, o quadro some.
 - **PWA**: `manifest.webmanifest` (ícones do SAMU, `display: standalone`) e `sw.js`:

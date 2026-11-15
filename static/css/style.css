@@ -58,11 +58,8 @@ button, input, select { font: inherit; color: inherit; }
 .hero {
   position: relative;
   color: #fff;
-  /* A foto tem tarjas pretas em cima/embaixo: 134% + 49% enquadra só a área útil
-     (logo + "SAMU 192"); o gradiente funde a borda direita da foto com o fundo. */
   background:
     linear-gradient(90deg, rgba(14, 26, 43, 0) 0, rgba(14, 26, 43, 0) 260px, var(--navy) 500px),
-    url("../img/samu.jpg") left 49% / auto 134% no-repeat,
     var(--navy);
   border-bottom: 4px solid var(--orange);
 }
@@ -505,9 +502,7 @@ tr.is-weekend td:first-child { color: #3B6FD8; font-weight: 600; }
 .login__brand {
   position: relative; display: flex; align-items: flex-end; padding: 48px;
   background:
-    linear-gradient(180deg, rgba(14, 26, 43, 0) 45%, rgba(14, 26, 43, .92) 100%),
-    /* 134% + 49% esconde as tarjas pretas de cima e de baixo da foto (igual ao topo do app) */
-    url("../img/samu.jpg") left 49% / auto 134% no-repeat, var(--navy);
+    linear-gradient(180deg, rgba(14, 26, 43, 0) 45%, rgba(14, 26, 43, .92) 100%), var(--navy);
   border-right: 4px solid var(--orange);
 }
 .login__brand-title { color: #fff; font-size: clamp(1.8rem, 3vw, 2.6rem); font-weight: 800; letter-spacing: -.01em; margin-top: 6px; }
@@ -517,9 +512,8 @@ tr.is-weekend td:first-child { color: #3B6FD8; font-weight: 600; }
   background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 32px 28px 24px;
 }
 .login__logo {
-  --t: 104px; /* recorte só do selo do SAMU na foto (selo entre 63–307 px de 750) */
+  --t: 104px;
   width: var(--t); height: var(--t); border-radius: 50%; justify-self: center;
-  background: url("../img/samu.jpg") calc(var(--t) * -63 / 244) calc(var(--t) * -83 / 244) / calc(var(--t) * 750 / 244) auto no-repeat;
   box-shadow: 0 0 0 4px #fff, 0 6px 20px rgba(200, 16, 46, .25);
 }
 .login__card h1 { font-size: 1.6rem; font-weight: 800; text-align: center; }
@@ -663,8 +657,7 @@ tr.is-weekend td:first-child { color: #3B6FD8; font-weight: 600; }
 @media (max-width: 960px) {
   .hero {
     background:
-      linear-gradient(90deg, rgba(14, 26, 43, 0) 0, rgba(14, 26, 43, 0) 30%, rgba(14, 26, 43, .85) 46%, var(--navy) 60%),
-      url("../img/samu.jpg") left 49% / auto 134% no-repeat, var(--navy);
+      linear-gradient(90deg, rgba(14, 26, 43, 0) 0, rgba(14, 26, 43, 0) 30%, rgba(14, 26, 43, .85) 46%, var(--navy) 60%), var(--navy);
   }
   .hero__inner { display: block; min-height: 0; padding: 24px 20px; }
   .userbar:not([hidden]) + .hero__inner { padding-top: 60px; }
@@ -674,7 +667,6 @@ tr.is-weekend td:first-child { color: #3B6FD8; font-weight: 600; }
   .hero .clima { width: 100%; }
 }
 @media (max-width: 640px) {
-  .hero { background-position: 0 0, 22% 49%, 0 0; }
   .userbar:not([hidden]) + .hero__inner { padding-top: 6px; }
   .hero__inner { padding: 6px 12px 16px; }
   .hero__text { width: 55%; }
@@ -701,3 +693,32 @@ tr.is-weekend td:first-child { color: #3B6FD8; font-weight: 600; }
 /* Calendário | Lista centralizado (o Desfazer da Revisão fica ao lado) */
 .toolbar { justify-content: center; }
 @media (max-width: 640px) { .toolbar__tools { justify-content: center; } }
+
+/* ---------- Logo do SAMU: imagem nítida num cartão branco (no lugar da foto ampliada) ---------- */
+.hero { background: radial-gradient(120% 160% at 0% 50%, #1B3150 0, var(--navy) 58%); }
+.hero::before {
+  content: ""; position: absolute; top: 50%; transform: translateY(-50%);
+  left: max(24px, calc((100% - 1240px) / 2 + 24px));
+  height: min(244px, calc(100% - 48px)); aspect-ratio: 846 / 1393;
+  background: #fff url("../img/samu-logo.png") center / 84% auto no-repeat;
+  border-radius: 20px; box-shadow: 0 18px 40px rgba(0, 0, 0, .35);
+}
+@media (max-width: 640px) {
+  .hero::before { left: 12px; height: min(210px, calc(100% - 28px)); max-width: 40%; border-radius: 16px; }
+}
+@media print { .hero::before { display: none; } }
+
+.login__brand-logo { display: none; }
+@media (min-width: 861px) {
+  .login__brand {
+    background: radial-gradient(90% 70% at 50% 42%, #1E3556 0, var(--navy) 70%);
+    justify-content: center; text-align: center; /* texto centralizado embaixo da logo */
+  }
+  .login__brand-logo {
+    display: block; position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%);
+    height: min(52vh, 460px); width: auto; padding: 26px 30px; box-sizing: content-box;
+    background: #fff; border-radius: 28px;
+    box-shadow: 0 28px 70px rgba(0, 0, 0, .45), 0 0 0 8px rgba(255, 255, 255, .06);
+  }
+}
+.login__logo { background: #fff url("../img/samu-emblema.png") center / 100% no-repeat; }

@@ -2,8 +2,8 @@
 // - Nunca guarda a API (/api/...): escala, login e auditoria vêm sempre do servidor.
 // - Páginas: sempre da rede; sem conexão, mostra offline.html.
 // - CSS, JS e imagens: da rede, com cópia guardada para abrir rápido e funcionar sem sinal.
-const CACHE = "escala-v1";
-const ESSENCIAIS = ["offline.html", "css/style.css", "img/samu.jpg", "img/icon-192.png"];
+const CACHE = "escala-v2";
+const ESSENCIAIS = ["offline.html", "css/style.css", "img/samu-logo.png", "img/icon-192.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ESSENCIAIS)).then(() => self.skipWaiting()));

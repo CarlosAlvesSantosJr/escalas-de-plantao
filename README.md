@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/img/samu.jpg" alt="SAMU 192" width="300">
+<img src="docs/img/samu-logo.png" alt="SAMU 192 Tubarão" width="190">
 
 # Escala de Plantão · SAMU 192
 
