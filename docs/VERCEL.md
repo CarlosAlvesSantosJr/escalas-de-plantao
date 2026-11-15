@@ -73,6 +73,12 @@ No PowerShell, troque `export X=...` por `$env:DATABASE_URL = "..."`.
 
 Cada `git push` no ramo `vercel-neon` publica sozinho uma versão nova.
 
+## Publicação atual
+
+- Endereço: **https://minhaescala192.vercel.app** (time `plantao-samu`, projeto `minhaescala192`)
+- Banco: Neon Free, região São Paulo (`gru1`), criado pela integração da Vercel
+- Para publicar uma versão nova a partir do PC: `vercel deploy --prod` (no ramo `vercel-neon`)
+
 ## Dia a dia
 
 | Tarefa | Como |
@@ -117,7 +123,7 @@ Postgres, mais os casos que só existem na nuvem:
 |---|---|
 | `vercel_app.py` | Ponto de entrada na Vercel (`app = create_app()`) |
 | `pyproject.toml` | Dependências e `[tool.vercel] entrypoint` (o `app.py` da raiz é o app de desktop) |
-| `vercel.json` | Região da função: São Paulo (`gru1`) |
+| `vercel.json` | Framework `flask` (sem isso, um projeto criado pela linha de comando sai vazio, com 404) e região São Paulo (`gru1`) |
 | `.vercelignore` | Não envia dados reais, segredos, docs, testes nem k8s para a Vercel |
 | `escala/banco.py` | Repositório, usuários, auditoria e bloqueio de login no Postgres |
 | `escala/relogio.py` | Data e hora no fuso de São Paulo |

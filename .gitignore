@@ -16,3 +16,6 @@ k8s/tunel-fixo/segredos/
 .secret_key
 auditoria.jsonl
 /usuarios.json
+
+.vercel
+.env*
