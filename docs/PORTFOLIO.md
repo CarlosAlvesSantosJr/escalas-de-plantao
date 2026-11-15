@@ -1,12 +1,27 @@
 # Escala de Plantão · SAMU 192
 
 > Estudo de caso · Carlos Alves Santos Jr · 2026
-> Gerador automático de escalas para equipes de ambulância do SAMU: monta duplas de enfermagem e socorrista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa. A coordenação revisa e ajusta a proposta antes de publicar.
+> Gerador automático de escalas para equipes de ambulância do SAMU: monta duplas de enfermagem e socorrista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa. A coordenação revisa e publica; a equipe troca plantões pelo celular, com as regras de descanso checadas na hora.
 
-**Papel:** produto, backend, frontend e UX
-**Stack:** Python 3.12 · Flask · Gunicorn · JavaScript (sem framework) · PWA · fpdf · Docker · Kubernetes · pytest · Tkinter
+**🔗 Em produção:** **[minhaescala192.vercel.app](https://minhaescala192.vercel.app)**, usado no dia a dia pela equipe do SAMU 192 de Tubarão-SC
+**Papel:** produto, backend, frontend, UX e implantação
+**Stack:** Python 3.12 · Flask · PostgreSQL (Neon) · Vercel · JavaScript (sem framework) · PWA · fpdf · Docker · Kubernetes · pytest
 
-![Escala final com cores por profissional](img/escala.jpg)
+![Escala no computador (coordenação) e no celular (equipe)](img/capa.jpg)
+
+<sub>Imagens com nomes fictícios.</sub>
+
+---
+
+## Em produção
+
+O sistema saiu do protótipo e **é a ferramenta de escala da equipe**:
+
+- **Coordenação (ADM):** monta e publica a escala de cada mês e acompanha as trocas pela auditoria.
+- **Equipe (10 profissionais, 11 usuários com acesso):** consulta a escala no celular, instalada como app, e **resolve as trocas de plantão entre si pelo próprio sistema**, vendo na hora quem pode assumir e quem não pode por causa das regras de descanso.
+- **Infraestrutura:** Vercel + Postgres da Neon, os dois em São Paulo. Fica no ar 24 horas, com endereço fixo e sem depender de nenhum computador ligado.
+
+O caminho até aqui também faz parte do caso. O sistema começou como app desktop, virou web com Docker, foi para Kubernetes no próprio PC com um túnel da Cloudflare e, por fim, para a nuvem. Cada etapa resolveu um problema real de uso (seção 7).
 
 ---
 
@@ -59,7 +74,7 @@ A coordenação pode escalar alguém com impedimento quando a exceção foi comb
 
 Depois de publicada, a escala fica com a equipe. Cada profissional entra com nome e matrícula, no celular, e pode trocar quem está num plantão. O editor é o mesmo da revisão: **"Podem assumir"** de um lado e **"Com impedimento"** do outro, com o motivo escrito. Quem saiu da NOITE anterior aparece como "Saindo do plantão da noite anterior"; quem já tem plantão no dia, como "Já tem outro plantão neste dia"; quem pegaria a NOITE tendo o DIA de amanhã, como "Tem plantão de dia logo após esta noite".
 
-A troca não espera aprovação, mas também não acontece no escuro: o servidor recusa se outra pessoa trocou a mesma posição antes, a mudança aparece em todas as telas em até 3 segundos e fica na auditoria da coordenação. O usuário não vê números de ninguém; a coordenação vê o total de plantões de cada pessoa, os conflitos e a distribuição.
+A troca não espera aprovação, mas também não acontece no escuro: o servidor recusa se outra pessoa trocou a mesma posição antes, a mudança aparece nas telas abertas em segundos e fica na auditoria da coordenação. O usuário não vê números de ninguém; a coordenação vê o total de plantões de cada pessoa, os conflitos e a distribuição.
 
 <table><tr>
 <td><img src="img/troca-usuario.jpg" alt="Editor de troca visto pelo usuário"></td>
@@ -142,37 +157,28 @@ flowchart TD
 
 ## 5. Arquitetura
 
-O projeto começou como um app desktop em Tkinter com tudo num arquivo só. A refatoração separou um **núcleo de domínio puro e testável**, usado tanto pela versão web quanto pela desktop.
+O projeto começou como um app desktop em Tkinter com tudo num arquivo só. A refatoração separou um **núcleo de domínio puro e testável**, que não sabe onde os dados ficam. Em produção, a mesma API grava num Postgres; no Docker, no Kubernetes e no desktop, em arquivos JSON.
 
 ```mermaid
 flowchart LR
-    subgraph Navegador
-        UI["SPA em HTML, CSS e JS<br/>sem framework, sem build"]
+    subgraph Cliente["Celular ou computador"]
+        UI["SPA + PWA<br/>HTML, CSS e JS sem build"]
     end
-    subgraph Desktop
-        TK["App Tkinter"]
-    end
-    subgraph Docker["Container Docker"]
-        API["API REST Flask<br/>servida por Gunicorn"]
+    subgraph Vercel["Vercel · São Paulo"]
+        API["API REST Flask<br/>perfis · auditoria"]
         subgraph Nucleo["Pacote escala"]
-            DOM["dominio.py<br/>modelos e regras"]
-            ALG["algoritmo.py<br/>geração da escala"]
-            AVA["avaliacao.py<br/>vagas, conflitos e estatísticas"]
-            REP["repositorio.py<br/>JSON com escrita atômica"]
+            DOM["dominio.py"]
+            ALG["algoritmo.py"]
+            AVA["avaliacao.py<br/>regras e candidatos"]
+            BAN["banco.py<br/>Postgres"]
             PDF["relatorio_pdf.py"]
         end
     end
-    DB[("dados_escala.json<br/>volume ./dados")]
-    UI -- "JSON via HTTP" --> API
-    API --> ALG
-    API --> AVA
-    API --> REP
-    API --> PDF
-    TK --> ALG
-    TK --> REP
-    ALG --> AVA
-    AVA --> DOM
-    REP --> DB
+    DB[("Neon Postgres<br/>escala · usuários · auditoria")]
+    UI -- "JSON via HTTPS" --> API
+    API --> ALG & AVA & BAN & PDF
+    ALG --> AVA --> DOM
+    BAN -- "transação + trava" --> DB
 ```
 
 | Caminho | Responsabilidade |
@@ -180,29 +186,15 @@ flowchart LR
 | `escala/dominio.py` | Modelos (`Funcionario`, `Periodo`, `Plantao`, `Escala`) e enums (`Cargo`, `Turno`, `Status`) |
 | `escala/algoritmo.py` | Geração da escala, sem I/O |
 | `escala/avaliacao.py` | Vagas, conflitos, estatísticas e candidatos de qualquer escala, gerada ou editada |
-| `escala/repositorio.py` | Persistência JSON com escrita atômica: equipe, rascunho em revisão e escala final; lê o formato antigo |
+| `escala/repositorio.py` | Estado da app, mês atual/seguinte e persistência em JSON com escrita atômica |
+| `escala/banco.py` | As mesmas interfaces sobre o Postgres: escala, usuários, auditoria e bloqueio de login |
 | `escala/relatorio_pdf.py` | PDF com DIA e NOITE lado a lado, com os dados embutidos para reimportar |
 | `webapp.py` | API REST Flask e frontend em `static/` |
-| `app.py` | Versão desktop, usando o mesmo núcleo |
-| `tests/` | 48 testes de regras, da API, dos perfis, do mês atual/seguinte, da auditoria e do PWA |
+| `tests/` | 80 testes: regras, API, perfis, concorrência, mês atual/seguinte, auditoria, PWA, e a API inteira de novo sobre um Postgres real |
 
 ### API e documentação técnica
 
-A API REST tem cerca de 25 rotas, e cada uma diz que perfil pode usá-la (as da equipe são só: ver a escala, ver candidatos e trocar um plantão). A referência completa, com **UML de classes, diagramas de sequência do login e da troca de plantão, ciclo de vida da escala e matriz de permissões**, está em [ARQUITETURA.md](ARQUITETURA.md).
-
----|---|---|
-| `GET` | `/api/estado` | Período, equipe, rascunho e escala final |
-| `PUT` | `/api/periodo` | Define o período (até 92 dias) |
-| `POST` / `PUT` / `DELETE` | `/api/funcionarios[/<id>]` | Cadastro da equipe |
-| `PATCH` | `/api/funcionarios/<id>/disponibilidade` | Alterações de disponibilidade em lote |
-| `GET` / `POST` / `DELETE` | `/api/rascunho` | Consulta, gera ou descarta a escala em revisão |
-| `PATCH` | `/api/rascunho` | Ajusta posições em lote (`funcionario_id: null` = vago) |
-| `GET` | `/api/rascunho/candidatos` | Quem pode ocupar uma posição e o que cada um quebraria |
-| `GET` / `POST` | `/api/escala` | Consulta a escala final / confirma o rascunho |
-| `POST` | `/api/escala/editar` | Reabre a escala final para revisão |
-| `POST` | `/api/escala/importar` | Importa um `.json` exportado ou um PDF gerado pelo sistema |
-| `GET` | `/api/escala.pdf` · `/api/escala.json` | Baixa a escala final |
-| `GET` | `/saude` | Healthcheck do container |
+A API REST tem cerca de 25 rotas, e cada uma diz que perfil pode usá-la (as da equipe são só: ver a escala, ver candidatos e trocar um plantão). A referência completa, com **UML de classes, diagramas de sequência do login e da troca de plantão, ciclo de vida da escala, persistência e matriz de permissões**, está em [ARQUITETURA.md](ARQUITETURA.md).
 
 ---
 
@@ -220,7 +212,9 @@ Comparação entre o algoritmo original e o novo, rodando sobre a disponibilidad
 | Vagas | "VAGO", sem explicação | Cada vaga informa o motivo |
 | Identidade | Pela posição na lista; nomes repetidos permitidos | Identificador único; nome duplicado bloqueado |
 | Dados | Gravação direta, podia corromper; período se perdia | Gravação atômica; período salvo |
-| Uso | Só com Python instalado | Navegador, com instalação por Docker em um clique |
+| Uso | Só com Python instalado, num computador | Navegador e app no celular, em [minhaescala192.vercel.app](https://minhaescala192.vercel.app) |
+| Disponibilidade | Só com o computador ligado | 24 horas na nuvem (Vercel + Neon), endereço fixo |
+| Trocas de plantão | Combinadas fora do sistema e repassadas à mão | Feitas pela própria equipe no app, com as regras checadas e auditoria |
 | Ajuste manual | Editar a planilha depois, sem checar as regras | Revisão na própria escala, com conflitos apontados na hora e desfazer |
 | Leitura da escala | Tabela única, uma linha por turno | Cores por profissional; PDF de uma página com DIA e NOITE lado a lado |
 | Reaproveitamento | A escala só existia no papel ou no PDF | O PDF reimporta a escala para edição, inclusive em outro computador |
@@ -232,7 +226,10 @@ Comparação entre o algoritmo original e o novo, rodando sobre a disponibilidad
 - **Guloso com olhar adiante, em vez de um solver.** Programação inteira acharia o ótimo global, mas traz uma dependência pesada e é mais difícil de explicar. O guloso com critérios ordenados roda em milissegundos, é determinístico, e cada escolha pode ser explicada em uma frase.
 - **Domínio puro e testável.** As regras não conhecem Flask, Tkinter nem JSON. Um dos testes falha de propósito se o "olhar adiante" for desligado.
 - **Frontend sem build.** HTML, CSS e JavaScript puros, servidos pelo Flask. Não há Node nem bundler para manter.
-- **JSON em vez de banco.** Para uma base com uma coordenação, um arquivo legível basta, é fácil de copiar como backup e é compatível com a versão anterior.
+- **De arquivo JSON para Postgres, sem reescrever o domínio.** Enquanto o app rodava num único processo, um arquivo legível bastava. Na Vercel não há disco e cada acesso pode cair numa cópia diferente do app. O webapp passou a falar com quatro interfaces (repositório, usuários, auditoria e limite de tentativas), e cada uma ganhou uma implementação em Postgres. A escala virou um documento JSONB com o mesmo formato do arquivo, então migrar e fazer backup é um comando.
+- **Trava no banco, não na memória.** Cada gravação roda numa transação com `pg_advisory_xact_lock`: duas trocas ao mesmo tempo, mesmo em cópias diferentes do app, são atendidas uma de cada vez. Um teste dispara duas cópias gravando em paralelo e confere que nada se perde.
+- **Fuso horário explícito.** A Vercel roda em UTC; sem cuidado, às 21h de Tubarão o sistema já estaria "amanhã" e viraria o mês três horas antes. Data e hora vêm de `relogio.py`, no fuso de São Paulo.
+- **Do PC para a nuvem por um motivo de uso.** No Kubernetes do próprio PC, com túnel temporário da Cloudflare, o endereço mudava a cada reinício e o app instalado nos celulares da equipe parava de abrir. A Vercel deu endereço fixo e funcionamento 24 horas, sem custo para uma equipe deste tamanho.
 - **Container enxuto e seguro.** Imagem `python:3.12-slim` (cerca de 190 MB), usuário sem privilégios, healthcheck, porta exposta só para o próprio computador e dados num volume.
 - **UX para quem usa.** Pincel com arrastar, atalhos de teclado de 1 a 4, a identidade visual do SAMU e um layout pensado para o celular: escala em cartões por dia, símbolo do SAMU sempre visível no topo, previsão do tempo de Tubarão-SC e instalação como app (PWA).
 - **Auditoria com prazo.** Os eventos ficam 30 dias e depois são apagados automaticamente, numa reescrita atômica do arquivo; o prazo é configurável.
@@ -243,24 +240,28 @@ Comparação entre o algoritmo original e o novo, rodando sobre a disponibilidad
 - **Cor como apoio, não como único sinal.** Cada profissional tem uma cor, mas o nome e a função estão sempre escritos, com texto escuro sobre fundo claro. Quem não distingue cores lê a escala do mesmo jeito.
 - **Privacidade da equipe.** O resumo de plantões por pessoa serve à coordenação e fica fora do PDF e da impressão. O servidor nem envia ao perfil Usuário os indicadores, os conflitos, a disponibilidade dos colegas e o total de plantões de cada um.
 - **Permissão no servidor, não só na tela.** Esconder um botão não basta: as rotas da coordenação respondem 403 ao perfil Usuário, e cada resposta é filtrada pelo perfil.
-- **Concorrência sem banco.** Cada troca leva quem o cliente viu na posição; se mudou, o servidor recusa (409) em vez de sobrescrever. As telas consultam uma rota leve de versão a cada 3 segundos.
+- **Ninguém sobrescreve ninguém.** Cada troca leva quem o cliente viu na posição; se mudou, o servidor recusa (409) em vez de sobrescrever. As telas consultam uma rota leve de versão (a cada 10 segundos na nuvem, pausando com a aba escondida, para caber no plano gratuito).
 
 ---
 
-## 8. Como rodar
+## 8. Como acessar e rodar
+
+- **Em produção:** [minhaescala192.vercel.app](https://minhaescala192.vercel.app) (acesso restrito à equipe, com nome e matrícula).
+- **No seu computador:**
 
 ```bash
 git clone https://github.com/CarlosAlvesSantosJr/escalas-de-plantao.git
 cd escalas-de-plantao
 docker compose up -d --build
-# abra http://localhost:8080 — os dados ficam em ./dados
+# abra http://localhost:8080 (os dados ficam em ./dados)
 ```
 
-No Windows, basta um duplo clique em `iniciar.bat`. Veja o [guia de instalação](INSTALACAO.md).
+No Windows, basta um duplo clique em `iniciar.bat`. Veja o [guia de instalação](INSTALACAO.md), a [implantação na Vercel](VERCEL.md) e o [guia do Kubernetes](../k8s/README.md).
 
 ## 9. Próximos passos
 
-- Aprovação opcional da coordenação para trocas feitas pela equipe.
-- Várias bases do SAMU no mesmo sistema.
-- Endereço fixo (túnel nomeado ou domínio próprio) para o app instalado.
-- Envio da escala por WhatsApp ou e-mail.
+- "Meus plantões": filtro pessoal e exportação para a agenda do celular (.ics).
+- Pedido de troca com aceite do colega e notificações no celular (push).
+- Folgas pedidas pela própria equipe, com aprovação da coordenação.
+- Justiça entre meses e peso de feriados no algoritmo.
+- Backup automático diário do banco.

@@ -4,6 +4,7 @@ __pycache__/
 
 # Dados locais e arquivos gerados
 dados/
+dados_escala.json
 dados_escala.backup.json
 escala_emergencia.pdf
 escala_samu_*.pdf

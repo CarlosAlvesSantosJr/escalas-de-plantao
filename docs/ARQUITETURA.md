@@ -3,10 +3,13 @@
 Documento técnico: componentes, modelo de domínio (UML), fluxos, perfis de acesso,
 API e a lógica que decide **quem pode assumir um plantão**.
 
+**Em produção:** [minhaescala192.vercel.app](https://minhaescala192.vercel.app), usado no dia a dia pela
+equipe do SAMU 192 de Tubarão-SC (Vercel + Postgres Neon, região São Paulo).
+
 Sumário: [Visão geral](#1-visão-geral) · [Módulos](#2-módulos) · [UML](#3-modelo-de-domínio-uml) ·
 [Troca de plantão](#4-lógica-da-troca-de-plantão) · [Mês atual e seguinte](#5-mês-atual-e-mês-seguinte) ·
 [Perfis](#6-perfis-e-acesso-às-informações) · [Fluxos](#7-fluxos-diagramas-de-sequência) · [API](#8-api) ·
-[Segurança](#9-segurança) · [Dados](#10-dados-e-persistência) · [Frontend e PWA](#11-frontend-e-pwa) · [Testes](#12-testes)
+[Segurança](#9-segurança) · [Dados](#10-dados-e-persistência) · [Frontend e PWA](#11-frontend-e-pwa) · [Testes](#12-testes) · [Implantação](#13-implantação)
 
 ---
 
@@ -14,37 +17,35 @@ Sumário: [Visão geral](#1-visão-geral) · [Módulos](#2-módulos) · [UML](#3
 
 ```mermaid
 flowchart LR
-    subgraph Cliente["Celular ou computador"]
+    subgraph Cliente["Celular ou computador da equipe"]
         PWA["Navegador / app instalado (PWA)<br/>HTML · CSS · JS sem framework"]
         SW["Service worker<br/>cache de CSS, JS e imagens"]
     end
     OM["Open-Meteo<br/>previsão de Tubarão-SC"]
-    subgraph Borda["Entrada HTTPS"]
-        CF["Cloudflare Tunnel<br/>(PC com Docker Desktop)"]
-        IN["Ingress Traefik + Let's Encrypt<br/>(nuvem/VPS)"]
+    subgraph Vercel["Vercel · região gru1 (São Paulo)"]
+        FN["Função Python<br/>Flask (vercel_app.py → webapp.py)<br/>sem disco · várias cópias"]
     end
-    subgraph K8s["Kubernetes · namespace escala-plantao"]
-        SVC["Service :80"]
-        POD["Pod escala · 1 réplica<br/>Gunicorn + Flask (webapp.py)"]
-        PVC[("PVC /data<br/>dados_escala.json · auditoria.jsonl")]
-        SEC[["Secret<br/>usuarios.json (hash) · chave de sessão"]]
+    subgraph Neon["Neon · Postgres (São Paulo)"]
+        T1[("escala_estado<br/>escala inteira em JSONB")]
+        T2[("escala_usuarios · escala_auditoria<br/>escala_falhas · escala_config")]
     end
     PWA <--> SW
-    PWA -- "JSON / HTTPS" --> CF
-    PWA -- "JSON / HTTPS" --> IN
+    PWA -- "HTTPS + JSON" --> FN
     PWA -- "fetch direto" --> OM
-    CF --> SVC
-    IN --> SVC
-    SVC --> POD
-    POD --> PVC
-    SEC --> POD
+    FN -- "psycopg · transação + trava" --> T1
+    FN --> T2
 ```
 
-- **Um único processo**, uma réplica: os dados ficam em arquivos JSON com trava em memória
-  (`threading.Lock`), então não pode haver dois pods escrevendo ao mesmo tempo
-  (estratégia `Recreate` no Deployment).
-- **Sem banco de dados**: um arquivo legível, fácil de copiar como backup.
-- Também roda com **Docker Compose** (`localhost:8080`) e como **app desktop** (Tkinter), usando o mesmo núcleo.
+- **Produção na nuvem:** o app roda como função Python na **Vercel** e guarda tudo num
+  **Postgres da Neon**, os dois em São Paulo. Não depende de nenhum computador ligado.
+- **Sem disco e com várias cópias:** cada acesso pode cair numa cópia diferente do app. Por
+  isso escala, usuários, auditoria, bloqueio de login e chave da sessão ficam no banco, e
+  toda gravação passa por uma trava do Postgres (`pg_advisory_xact_lock`).
+- **Mesmo código, dois modos de dados:** com `DATABASE_URL` definida, usa o Postgres
+  (`escala/banco.py`). Sem ela, usa arquivos JSON (`escala/repositorio.py`), como no Docker,
+  no Kubernetes e no app desktop. Veja a [seção 10](#10-dados-e-persistência).
+- O núcleo de regras (`escala/`) não sabe onde os dados ficam: algoritmo, avaliação e PDF
+  são os mesmos em todos os modos.
 
 ## 2. Módulos
 
@@ -54,6 +55,8 @@ flowchart TB
         WEB["webapp.py<br/>API REST + perfis + auditoria"]
         TK["app.py<br/>desktop Tkinter"]
         CLI["usuarios_cli.py<br/>cria usuários (hash)"]
+        BCLI["banco_cli.py<br/>envia dados · backup"]
+        VA["vercel_app.py<br/>entrada na Vercel"]
     end
     subgraph escala["Pacote escala/ (domínio puro, sem Flask)"]
         DOM["dominio.py<br/>modelos e enums"]
@@ -62,8 +65,13 @@ flowchart TB
         REP["repositorio.py<br/>JSON atômico · papéis das escalas"]
         USR["usuarios.py<br/>login · limite de tentativas · auditoria"]
         PDF["relatorio_pdf.py<br/>PDF com dados embutidos"]
+        BAN["banco.py<br/>mesmas interfaces no Postgres"]
+        REL["relogio.py<br/>fuso de São Paulo"]
     end
-    WEB --> ALG & AVA & REP & USR & PDF
+    VA --> WEB
+    WEB --> ALG & AVA & REP & USR & PDF & BAN
+    BCLI --> BAN
+    BAN --> REP & USR
     TK --> ALG & REP
     CLI --> USR
     ALG --> AVA --> DOM
@@ -78,6 +86,10 @@ flowchart TB
 | `escala/repositorio.py` | `EstadoApp` (equipe, período, rascunho, escalas confirmadas), gravação atômica, `classificar()` (mês atual/seguinte) |
 | `escala/usuarios.py` | `CadastroUsuarios` (scrypt), `LimiteTentativas`, `Auditoria` (JSON Lines, retenção de 30 dias) |
 | `escala/relatorio_pdf.py` | PDF da escala com os dados embutidos para reimportar |
+| `escala/banco.py` | `RepositorioPostgres`, `CadastroPostgres`, `AuditoriaPostgres`, `LimitePostgres`: as mesmas interfaces das versões em arquivo, sobre o Postgres |
+| `escala/relogio.py` | `agora()` e `hoje()` no fuso `America/Sao_Paulo` (a Vercel roda em UTC) |
+| `vercel_app.py` · `pyproject.toml` · `vercel.json` | Entrada, dependências e região da função na Vercel |
+| `banco_cli.py` | Envia os arquivos atuais para o banco e baixa backups |
 | `webapp.py` | Rotas, permissões por perfil, filtro dos dados enviados a cada perfil |
 | `static/` | SPA (`index.html`, `js/app.js`), login, clima (`js/clima.js`), PWA (`manifest.webmanifest`, `sw.js`, `offline.html`) |
 
@@ -271,7 +283,7 @@ Se outra pessoa trocou a mesma posição nesse meio-tempo, o servidor responde *
 vez de sobrescrever, e a tela se atualiza.
 
 **Rastro.** Toda troca na escala confirmada vira um evento `PLANTAO_ALTERADO` na
-auditoria: "Qua 02/12 DIA · Enfermagem: MONICA → ERALDO", com quem fez, quando e o IP.
+auditoria: "Qua 02/12 DIA · Enfermagem: EMMA → OLIVER", com quem fez, quando e o IP.
 As outras telas abertas mostram o aviso e piscam a posição em até 3 segundos.
 
 ## 5. Mês atual e mês seguinte
@@ -362,29 +374,29 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    actor M as Usuário (Monica)
-    participant TM as Tela da Monica
+    actor M as Usuária (Emma)
+    participant TM as Tela da Emma
     participant A as webapp.py
     participant AV as avaliacao.py
-    participant R as repositorio (JSON)
+    participant R as Repositório (Postgres)
     participant AU as Auditoria
     participant TO as Outras telas abertas
-    M->>TM: clica em "MONICA" (02/12 DIA, Enfermagem)
+    M->>TM: clica em "EMMA" (02/12 DIA, Enfermagem)
     TM->>A: GET /api/escala/candidatos?data&turno&cargo
     A->>AV: candidatos() → impedimentos() de cada um
     A-->>TM: lista (sem total de plantões para o usuário)
     TM->>M: "Podem assumir" × "Com impedimento" (motivos)
-    M->>TM: escolhe ERALDO
-    TM->>A: PATCH /api/escala {funcionario_id, esperado: MONICA}
-    A->>R: lock · carrega · confere "esperado"
+    M->>TM: escolhe OLIVER
+    TM->>A: PATCH /api/escala {funcionario_id, esperado: EMMA}
+    A->>R: BEGIN · trava · carrega · confere "esperado"
     alt alguém trocou antes
         A-->>TM: 409 (tela recarrega a posição)
     else
-        A->>R: grava (arquivo temporário + rename)
-        A->>AU: PLANTAO_ALTERADO "Qua 02/12 DIA · Enfermagem: MONICA → ERALDO"
+        A->>R: grava e COMMIT (versão + 1)
+        A->>AU: PLANTAO_ALTERADO "Qua 02/12 DIA · Enfermagem: EMMA → OLIVER"
         A-->>TM: escala atualizada
     end
-    loop a cada 3 s
+    loop a cada 10 s (3 s no modo arquivo)
         TO->>A: GET /api/versao
         A-->>TO: versão mudou + última troca (sem IP)
         TO->>TO: recarrega, avisa e pisca a posição
@@ -432,17 +444,39 @@ Erros de negócio voltam como `{"erro": "mensagem"}` com 400, 401, 403, 404, 409
 | CSRF: escrita exige `X-Requested-With: fetch` | `_autorizar()` |
 | Permissão por perfil no servidor + filtro dos dados enviados | `API_USUARIO`, `escala_json(completo=…)` |
 | Cabeçalhos `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `no-store` na API | `_cabecalhos()` |
-| IP real atrás do proxy | `ESCALA_ATRAS_DE_PROXY` (ProxyFix) |
+| IP real atrás do proxy | `ESCALA_ATRAS_DE_PROXY` (ProxyFix); ligado sozinho na Vercel |
+| Bloqueio de login e sessão valem para todas as cópias do app | Tabelas `escala_falhas` e `escala_config` |
+| Credenciais do banco só em variável de ambiente | `DATABASE_URL` (injetada pela integração Neon) |
+| Nada de dados reais ou segredos no pacote publicado | `.vercelignore` |
 | Pod sem root, sistema de arquivos somente leitura, sem capabilities | `k8s/base/deployment.yaml` |
 | Segredos fora do Git | `k8s/base/segredos/` no `.gitignore` |
 
 ## 10. Dados e persistência
 
-| Arquivo | Conteúdo | Regras |
-|---|---|---|
-| `dados_escala.json` | Equipe, disponibilidade, período, rascunho, até 12 escalas confirmadas | Gravação atômica (temporário + rename) sob lock |
-| `auditoria.jsonl` | Um evento por linha: login, falhas, trocas, ações do ADM | Guarda os últimos **30 dias** (`ESCALA_AUDITORIA_DIAS`); limpeza ao iniciar e no máximo 1×/hora |
-| `usuarios.json` | Nome, papel, hash da matrícula, ativo | Gerado pelo `usuarios_cli.py`; no Kubernetes vem de um Secret |
+O webapp conversa com quatro interfaces (repositório, cadastro de usuários, auditoria e
+limite de tentativas). Cada uma tem duas implementações, escolhidas ao iniciar:
+
+```mermaid
+flowchart LR
+    W["webapp.py"] --> Q{"DATABASE_URL?"}
+    Q -- "sim (Vercel)" --> PG["escala/banco.py<br/>RepositorioPostgres · CadastroPostgres<br/>AuditoriaPostgres · LimitePostgres"]
+    Q -- "não (Docker, K8s, desktop)" --> FS["repositorio.py · usuarios.py<br/>RepositorioJSON · CadastroUsuarios<br/>Auditoria · LimiteTentativas"]
+    PG --> N[("Neon Postgres")]
+    FS --> D[("/data<br/>arquivos JSON")]
+```
+
+| Dado | Postgres (produção) | Arquivo (Docker/K8s) | Regras |
+|---|---|---|---|
+| Equipe, disponibilidade, período, rascunho, até 12 escalas | `escala_estado` (1 linha, JSONB, `versao`) | `dados_escala.json` | Trava + transação no banco; gravação atômica (temporário + rename) no arquivo |
+| Auditoria | `escala_auditoria` (índice por data) | `auditoria.jsonl` | Últimos **30 dias** (`ESCALA_AUDITORIA_DIAS`); limpeza no máximo 1×/hora |
+| Usuários | `escala_usuarios` | `usuarios.json` (Secret no K8s) | Só o hash scrypt da matrícula |
+| Tentativas de login | `escala_falhas` | memória | 5 erros em 15 min bloqueiam nome e IP |
+| Chave da sessão | `escala_config` ou `ESCALA_SECRET_KEY` | `.secret_key` ou `ESCALA_SECRET_KEY` | Gerada uma vez |
+
+**Por que um JSON só para a escala?** O domínio já é um agregado (`EstadoApp`) lido e gravado
+inteiro, com poucos KB. Guardá-lo como um documento JSONB mantém o mesmo formato do
+arquivo: a migração é um comando (`banco_cli.py enviar`) e o backup volta como os mesmos
+arquivos (`banco_cli.py baixar`), que abrem no Docker sem conversão.
 
 ## 11. Frontend e PWA
 
@@ -459,10 +493,31 @@ Erros de negócio voltam como `{"erro": "mensagem"}` com 400, 401, 403, 404, 409
 
 ## 12. Testes
 
-`pytest` com **48 testes**, em `tests/test_algoritmo.py` (regras e algoritmo) e
-`tests/test_webapp.py` (API, perfis, troca concorrente, mês atual/seguinte, importação,
-auditoria com retenção de 30 dias e PWA).
+`pytest` com **80 testes**:
+
+| Arquivo | O que cobre |
+|---|---|
+| `tests/test_algoritmo.py` | Regras de descanso, disponibilidade, equilíbrio e o algoritmo |
+| `tests/test_webapp.py` | API, perfis, troca concorrente (409), mês atual/seguinte, importação, auditoria de 30 dias, PWA |
+| `tests/test_banco.py` | **Todos** os testes do webapp de novo sobre um Postgres real, mais: duas cópias do app gravando ao mesmo tempo, sessão e bloqueio de login valendo entre cópias, limpeza da auditoria no banco |
 
 ```bash
-python -m pytest -q
+python -m pytest -q                                   # 48 testes, modo arquivo
+docker run -d --rm --name escala-pg-teste -e POSTGRES_PASSWORD=teste -e POSTGRES_DB=escala \
+       -p 127.0.0.1:55432:5432 postgres:17-alpine
+ESCALA_TESTE_BANCO=postgresql://postgres:teste@127.0.0.1:55432/escala python -m pytest -q   # 80
 ```
+
+## 13. Implantação
+
+| Modo | Onde | Endereço | Dados | Guia |
+|---|---|---|---|---|
+| **Produção** | Vercel (função Python, São Paulo) | **https://minhaescala192.vercel.app** | Neon Postgres | [docs/VERCEL.md](VERCEL.md) |
+| Kubernetes no PC | Docker Desktop + Cloudflare Tunnel | `https://…trycloudflare.com` ou domínio próprio | Disco do cluster (PVC) | [k8s/README.md](../k8s/README.md) |
+| Kubernetes na nuvem | Qualquer cluster + Traefik + Let's Encrypt | Domínio próprio | PVC | [k8s/README.md](../k8s/README.md) |
+| Docker Compose | Qualquer PC | `http://localhost:8080` | Pasta `dados/` | [INSTALACAO.md](INSTALACAO.md) |
+
+A produção começou no Kubernetes do próprio PC, com túnel da Cloudflare. A mudança para
+Vercel + Neon tirou duas limitações: o sistema não depende mais de um PC ligado, e o
+endereço não muda mais (antes, cada mudança quebrava o app instalado nos celulares).
+

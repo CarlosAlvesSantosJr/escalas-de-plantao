@@ -1,5 +1,11 @@
 # Rodar no Kubernetes (acesso externo)
 
+> **A produção atual roda na Vercel com Postgres da Neon**, em
+> [minhaescala192.vercel.app](https://minhaescala192.vercel.app) ([docs/VERCEL.md](../docs/VERCEL.md)).
+> O Kubernetes continua como alternativa: rodar num servidor próprio, sem depender de
+> serviços de nuvem. Foi por ele que o sistema entrou em uso, no próprio PC com um túnel da
+> Cloudflare.
+
 Com este guia, a escala fica acessível pela internet num endereço como
 `https://escala.seudominio.com.br`, com HTTPS e login por nome + matrícula.
 

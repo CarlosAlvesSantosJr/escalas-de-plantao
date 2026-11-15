@@ -1,105 +1,98 @@
-# Rodar na Vercel com banco Neon (teste)
+# Produção: Vercel + Neon
 
-Esta versão roda o app na **Vercel** (servidor da Vercel, sem precisar de PC ligado)
-e guarda tudo num **Postgres gratuito da Neon**. Ela está no ramo `vercel-neon`.
-A versão estável, com Docker e Kubernetes, continua na tag `v1.4.1` e funciona
-como antes.
+O sistema está no ar em **[minhaescala192.vercel.app](https://minhaescala192.vercel.app)** e é usado
+no dia a dia pela equipe. O app roda como função Python na **Vercel** e guarda tudo num
+**Postgres da Neon**, os dois em São Paulo. Não depende de nenhum computador ligado.
 
 ```
-Celular / PC ──HTTPS──▶ Vercel (Flask, região São Paulo) ──▶ Neon Postgres (São Paulo)
-                         sem disco: cada acesso pode           escala, usuários, auditoria,
-                         cair numa cópia diferente do app       tentativas de login, chave da sessão
+Celular / PC ──HTTPS──▶ Vercel (Flask, região gru1, São Paulo) ──▶ Neon Postgres (São Paulo)
+                         sem disco: cada acesso pode                escala, usuários, auditoria,
+                         cair numa cópia diferente do app            tentativas de login, chave da sessão
 ```
+
+| Item | Valor |
+|---|---|
+| Endereço | https://minhaescala192.vercel.app |
+| Projeto Vercel | `minhaescala192` (time `plantao-samu`, plano Hobby) |
+| Banco | Neon Free, região `gru1` (São Paulo), criado pela integração da Vercel |
+| Variável com a conexão | `DATABASE_URL` (criada pela integração) |
+| Publicação | `vercel deploy --prod`, a partir do PC |
 
 ## O que muda em relação ao Docker/Kubernetes
 
-| | Docker / Kubernetes | Vercel + Neon |
+| | Docker / Kubernetes | Vercel + Neon (produção) |
 |---|---|---|
-| Onde ficam as escalas | Arquivo `dados_escala.json` no disco | Tabela `escala_estado` (Neon) |
+| Onde ficam as escalas | Arquivo `dados_escala.json` no disco | Tabela `escala_estado` (JSONB) |
 | Usuários | Arquivo `usuarios.json` (Secret) | Tabela `escala_usuarios` |
 | Auditoria (30 dias) | `auditoria.jsonl` | Tabela `escala_auditoria` |
 | Bloqueio de tentativas de login | Memória do processo | Tabela `escala_falhas` (vale para todas as cópias) |
 | Duas trocas ao mesmo tempo | Trava em memória (1 processo) | Trava do Postgres (`pg_advisory_xact_lock`) |
 | Chave da sessão | `ESCALA_SECRET_KEY` ou arquivo | `ESCALA_SECRET_KEY` ou tabela `escala_config` |
 | Fuso horário | TZ do contêiner | `America/Sao_Paulo` no código (a Vercel roda em UTC) |
-| Atualização das telas | A cada 3 s, mesmo com a aba escondida | A cada 10 s, pausa com a aba escondida |
+| Atualização das telas | A cada 3 s | A cada 10 s, pausando com a aba escondida |
 | Precisa de PC ligado | Sim | Não |
 
-O app escolhe o modo sozinho: com a variável `DATABASE_URL` definida, usa o banco.
-Sem ela, usa os arquivos, como sempre.
+O app escolhe o modo sozinho: com `DATABASE_URL` definida, usa o banco. Sem ela, usa
+os arquivos, como sempre.
 
-## Passo a passo
+## Como foi montado (para refazer do zero)
 
-### 1. Projeto na Vercel
-
-1. Entre em https://vercel.com com a sua conta do GitHub (plano **Hobby**, grátis).
-2. **Add New → Project** → importe o repositório `escalas-de-plantao` → **Deploy**.
-   O primeiro deploy **falha**, de propósito, porque ainda não há banco.
-   A mensagem é "Defina DATABASE_URL".
-3. **Settings → Git → Production Branch**: troque para `vercel-neon` e salve.
-   Assim o endereço principal (`https://<projeto>.vercel.app`) usa esta versão.
-   Não teste por um endereço de *preview*: ele vem protegido por login da Vercel,
-   e a equipe não consegue abrir.
-
-### 2. Banco Neon
-
-1. No projeto: **Storage → Create Database → Neon** (Serverless Postgres) → plano **Free**.
-2. Região: **São Paulo (aws-sa-east-1)**, a mesma da função (`gru1`, em `vercel.json`).
-3. **Connect** ao projeto, marcando os ambientes Production e Preview.
-   A Vercel cria a variável `DATABASE_URL`.
-
-As tabelas são criadas sozinhas no primeiro acesso.
-
-### 3. Levar os dados de hoje para o banco
-
-No PC, com a escala atual e os usuários. Pegue a *connection string* em
-**Storage → (banco) → .env.local → `DATABASE_URL`**:
+Tudo pela linha de comando da Vercel (`npm install -g vercel`), na pasta do projeto:
 
 ```bash
+vercel login                                         # aprova no navegador
+vercel project create minhaescala192                 # o nome vira o endereço .vercel.app
+vercel link --yes --project minhaescala192
+
+# Banco Neon grátis em São Paulo, já conectado ao projeto (cria DATABASE_URL).
+# Na primeira vez a Neon pede para aceitar os termos no navegador.
+vercel integration add neon --billing-plan free_v3 --meta region=gru1
+
+# Leva os dados atuais (backup do Kubernetes) e os usuários para o banco.
+# A conexão vem do .env.local que o comando acima baixou (fica fora do Git).
 pip install "psycopg[binary]" tzdata
-# Escala e auditoria do Kubernetes (copie antes do pod: veja k8s/README.md, "Backup")
-export DATABASE_URL="postgresql://...neon.tech/neondb?sslmode=require"
+export DATABASE_URL="$(grep '^DATABASE_URL=' .env.local | cut -d= -f2- | tr -d '"')"
 python banco_cli.py enviar --dados dados/backup-AAAAMMDD/dados_escala.json \
                            --auditoria dados/backup-AAAAMMDD/auditoria.jsonl \
                            --usuarios k8s/base/segredos/usuarios.json
+
+vercel deploy --prod                                 # publica
 ```
 
 No PowerShell, troque `export X=...` por `$env:DATABASE_URL = "..."`.
 
-### 4. Publicar
-
-**Deployments → (o último) → Redeploy**. Depois abra
-`https://<projeto>.vercel.app` e entre com o seu nome e matrícula.
-
-Cada `git push` no ramo `vercel-neon` publica sozinho uma versão nova.
-
-## Publicação atual
-
-- Endereço: **https://minhaescala192.vercel.app** (time `plantao-samu`, projeto `minhaescala192`)
-- Banco: Neon Free, região São Paulo (`gru1`), criado pela integração da Vercel
-- Para publicar uma versão nova a partir do PC: `vercel deploy --prod` (no ramo `vercel-neon`)
+**Detalhes que importam:**
+- **`vercel.json` precisa de `"framework": "flask"`.** Sem isso, um projeto criado pela
+  linha de comando é publicado como site estático vazio, e todas as páginas dão 404.
+- **`pyproject.toml` define a entrada** (`[tool.vercel] entrypoint = "vercel_app:app"`),
+  porque a raiz também tem o `app.py` do app de desktop.
+- **`.vercelignore`** impede que dados reais, segredos, docs, testes e manifests do
+  Kubernetes subam para a Vercel.
+- As tabelas são criadas sozinhas no primeiro acesso.
 
 ## Dia a dia
 
 | Tarefa | Como |
 |---|---|
-| Backup | `python banco_cli.py baixar backups/2026-11-15` (gera os mesmos 3 arquivos do modo Docker) |
+| Publicar uma versão nova | Rodar os testes e depois `vercel deploy --prod` |
+| Backup | `python banco_cli.py baixar backups/AAAA-MM-DD` (gera os mesmos 3 arquivos do modo Docker) |
 | Novo usuário ou troca de matrícula | `python usuarios_cli.py adicionar usuarios.json "Nome"` e depois `python banco_cli.py enviar --usuarios usuarios.json` |
-| Domínio próprio | **Settings → Domains → Add** (ex.: `escala.seudominio.com.br`); a Vercel mostra o registro DNS a criar |
-| Ver erros | **Deployments → Logs** (o plano grátis guarda 1 hora) |
+| Domínio próprio | Na Vercel: **Settings → Domains → Add** (ex.: `escala.seudominio.com.br`); ela mostra o registro DNS a criar |
+| Ver erros | `vercel logs minhaescala192.vercel.app` ou **Deployments → Logs** (o plano grátis guarda 1 hora) |
 
-A lista de usuários do banco é **substituída** a cada `enviar --usuarios`. Guarde
-o `usuarios.json` (só com hashes) num lugar seguro, fora do GitHub.
+A lista de usuários do banco é **substituída** a cada `enviar --usuarios`. Guarde o
+`usuarios.json` (só com hashes) num lugar seguro, fora do GitHub.
 
 ## Limites do plano grátis (para uma equipe pequena, sobra)
 
-- **Vercel Hobby:** 1 milhão de execuções por mês. Cada tela aberta consulta a
-  cada 10 s só enquanto está visível. Dez pessoas com o app aberto 1 h por dia
-  dão cerca de 110 mil consultas por mês.
-- **Neon Free:** o banco "dorme" depois de 5 minutos sem uso. O primeiro acesso
-  depois disso demora cerca de 1 s a mais.
-- O plano Hobby é para uso pessoal e não comercial. Para uso oficial do
-  serviço, avalie o plano Pro ou o modo Docker/Kubernetes.
+- **Vercel Hobby:** 1 milhão de execuções por mês. Cada tela aberta consulta a cada 10 s
+  só enquanto está visível: dez pessoas com o app aberto 1 h por dia dão cerca de
+  110 mil consultas por mês.
+- **Neon Free:** o banco "dorme" depois de 5 minutos sem uso. O primeiro acesso depois
+  disso demora cerca de 1 s a mais.
+- **Auditoria:** guarda os últimos 30 dias; a limpeza roda quando há uso, no máximo 1×/hora.
+- O plano Hobby é para uso pessoal e não comercial. Se o uso virar oficial do serviço,
+  avalie o plano Pro ou o modo Docker/Kubernetes.
 
 ## Testes
 
@@ -110,20 +103,20 @@ docker run -d --rm --name escala-pg-teste -e POSTGRES_PASSWORD=teste -e POSTGRES
 ESCALA_TESTE_BANCO=postgresql://postgres:teste@127.0.0.1:55432/escala pytest   # + modo banco
 ```
 
-O `tests/test_banco.py` roda **todos** os testes do webapp de novo sobre o
-Postgres, mais os casos que só existem na nuvem:
+O `tests/test_banco.py` roda **todos** os testes do webapp de novo sobre o Postgres, mais
+os casos que só existem na nuvem:
 - duas cópias do app gravando ao mesmo tempo;
 - a sessão valendo entre cópias;
 - o bloqueio de login valendo entre cópias;
 - a limpeza da auditoria no banco.
 
-## Arquivos desta versão
+## Arquivos desta implantação
 
 | Arquivo | Papel |
 |---|---|
 | `vercel_app.py` | Ponto de entrada na Vercel (`app = create_app()`) |
-| `pyproject.toml` | Dependências e `[tool.vercel] entrypoint` (o `app.py` da raiz é o app de desktop) |
-| `vercel.json` | Framework `flask` (sem isso, um projeto criado pela linha de comando sai vazio, com 404) e região São Paulo (`gru1`) |
+| `pyproject.toml` | Dependências e `[tool.vercel] entrypoint` |
+| `vercel.json` | Framework `flask` e região da função: São Paulo (`gru1`) |
 | `.vercelignore` | Não envia dados reais, segredos, docs, testes nem k8s para a Vercel |
 | `escala/banco.py` | Repositório, usuários, auditoria e bloqueio de login no Postgres |
 | `escala/relogio.py` | Data e hora no fuso de São Paulo |

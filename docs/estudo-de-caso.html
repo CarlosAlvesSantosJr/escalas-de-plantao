@@ -129,6 +129,13 @@ td:first-child { font-weight: 600; white-space: nowrap; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { font-family: var(--font-mono); font-size: .8rem; font-weight: 500; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); }
 
+.cta { display: inline-flex; align-items: center; gap: 10px; margin-top: 18px; padding: 12px 20px; border-radius: 10px; background: var(--red); color: #fff; font-weight: 700; text-decoration: none; }
+.cta:hover { filter: brightness(1.08); }
+.cta small { font-weight: 500; opacity: .85; }
+.live { display: inline-flex; align-items: center; gap: 8px; margin-left: 12px; font-family: var(--font-mono); font-size: .78rem; color: #9FE3BF; }
+.live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #4CC28A; box-shadow: 0 0 0 4px rgba(76,194,138,.25); }
+.capa { margin-top: 24px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }
+.capa img { display: block; width: 100%; height: auto; }
 footer { margin-top: 72px; border-top: 5px solid var(--red); background: var(--navy); color: #C9D3E1; }
 footer .wrap { padding-block: 28px 32px; display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; font-size: .9rem; }
 footer a { color: #FFB48A; }
@@ -149,13 +156,14 @@ footer a { color: #FFB48A; }
   <div class="wrap">
     <div class="cover__logo" role="img" aria-label="Logotipo SAMU 192"></div>
     <div>
-      <p class="eyebrow">Estudo de caso · Projeto independente</p>
+      <p class="eyebrow">Estudo de caso · Em produção</p>
       <h1>Escala de Plantão <span>SAMU 192</span></h1>
-      <p class="cover__lead">Um gerador automático de escalas para as equipes de ambulância do SAMU: monta duplas de enfermagem e socorrista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa. A coordenação revisa e ajusta a proposta antes de publicar.</p>
+      <p class="cover__lead">Um gerador automático de escalas para as equipes de ambulância do SAMU: monta duplas de enfermagem e socorrista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa. A coordenação publica; a equipe troca plantões pelo celular, com as regras de descanso checadas na hora.</p>
+      <a class="cta" href="https://minhaescala192.vercel.app" target="_blank" rel="noopener">Acessar o app <small>minhaescala192.vercel.app</small></a><span class="live">em uso pela equipe</span>
       <dl class="meta">
         <div><dt>Autor</dt><dd>Carlos Alves Santos Jr</dd></div>
-        <div><dt>Papel</dt><dd>Produto, backend, frontend e UX</dd></div>
-        <div><dt>Stack</dt><dd>Python · Flask · JS · Docker</dd></div>
+        <div><dt>Papel</dt><dd>Produto, backend, frontend, UX e implantação</dd></div>
+        <div><dt>Stack</dt><dd>Python · Flask · PostgreSQL · Vercel</dd></div>
         <div><dt>Ano</dt><dd>2026</dd></div>
       </dl>
     </div>
@@ -163,6 +171,16 @@ footer a { color: #FFB48A; }
 </header>
 
 <main class="wrap">
+
+  <section aria-labelledby="producao">
+    <div class="section-head">
+      <span class="kicker">Em produção</span>
+      <h2 id="producao">Usado todos os dias pela equipe</h2>
+      <p class="muted prose">O sistema é a ferramenta de escala do SAMU 192 de Tubarão-SC. A coordenação monta e publica a escala de cada mês; a equipe (10 profissionais, 11 usuários com acesso) consulta no celular, instalada como app, e <strong>resolve as trocas de plantão pelo próprio sistema</strong>, vendo na hora quem pode assumir e quem não pode por causa das regras de descanso. Roda na Vercel com um Postgres da Neon, os dois em São Paulo: 24 horas no ar, com endereço fixo e sem depender de nenhum computador ligado.</p>
+    </div>
+    <div class="capa"><img src="img/capa.jpg" alt="Escala no computador da coordenação e no celular da equipe (nomes fictícios)" width="1600" height="1000"></div>
+    <p class="muted" style="font-size:.85rem;margin-top:8px">Imagens com nomes fictícios. O acesso ao app é restrito à equipe.</p>
+  </section>
 
   <section aria-labelledby="contexto">
     <div class="section-head">
@@ -325,39 +343,34 @@ flowchart TD
   <section aria-labelledby="arquitetura">
     <div class="section-head">
       <span class="kicker">Arquitetura</span>
-      <h2 id="arquitetura">Um núcleo, duas interfaces</h2>
-      <p class="muted prose">O projeto começou como um app desktop em Tkinter com tudo num arquivo só. A refatoração separou um núcleo de domínio puro e testável, usado tanto pela versão web quanto pela desktop. A versão web roda num container Docker, com os dados num volume.</p>
+      <h2 id="arquitetura">Um núcleo, do PC à nuvem</h2>
+      <p class="muted prose">O projeto começou como um app desktop em Tkinter com tudo num arquivo só. A refatoração separou um núcleo de domínio puro e testável, que não sabe onde os dados ficam. A versão web passou por Docker e por Kubernetes no próprio PC e hoje roda na Vercel, gravando num Postgres da Neon. O mesmo código ainda roda com arquivos JSON no Docker e no Kubernetes.</p>
     </div>
     <div class="diagram">
 <pre class="mermaid">
 flowchart LR
-    subgraph Navegador
-        UI["SPA em HTML, CSS e JS<br/>sem framework, sem build"]
+    subgraph Cliente["Celular ou computador"]
+        UI["SPA + PWA<br/>HTML, CSS e JS sem build"]
     end
-    subgraph Desktop
-        TK["App Tkinter"]
-    end
-    subgraph Docker["Container Docker"]
-        API["API REST Flask<br/>servida por Gunicorn"]
+    subgraph Vercel["Vercel · São Paulo"]
+        API["API REST Flask<br/>perfis · auditoria"]
         subgraph Nucleo["Pacote escala"]
-            DOM["dominio.py<br/>modelos e regras"]
-            ALG["algoritmo.py<br/>geração da escala"]
-            AVA["avaliacao.py<br/>vagas, conflitos e estatísticas"]
-            REP["repositorio.py<br/>JSON com escrita atômica"]
+            DOM["dominio.py"]
+            ALG["algoritmo.py"]
+            AVA["avaliacao.py<br/>regras e candidatos"]
+            BAN["banco.py<br/>Postgres"]
             PDF["relatorio_pdf.py"]
         end
     end
-    DB[("dados_escala.json<br/>volume ./dados")]
-    UI -- "JSON via HTTP" --> API
+    DB[("Neon Postgres<br/>escala · usuários · auditoria")]
+    UI -- "JSON via HTTPS" --> API
     API --> ALG
     API --> AVA
-    API --> REP
+    API --> BAN
     API --> PDF
-    TK --> ALG
-    TK --> REP
     ALG --> AVA
     AVA --> DOM
-    REP --> DB
+    BAN -- "transação + trava" --> DB
 </pre>
     </div>
   </section>
@@ -371,7 +384,7 @@ flowchart LR
     <div class="results">
       <div class="result is-good"><b>100%</b><span>das 124 posições do mês preenchidas</span></div>
       <div class="result is-good"><b>5 <small>→</small> 3</b><span>diferença máxima de plantões na enfermagem</span></div>
-      <div class="result"><b>48</b><span>testes automatizados de regra, API, perfis, auditoria e PWA</span></div>
+      <div class="result"><b>80</b><span>testes automatizados, com a API inteira repetida sobre um Postgres real</span></div>
       <div class="result"><b>&lt;1<small>s</small></b><span>para gerar a escala de um mês</span></div>
     </div>
     <div class="table-wrap" style="margin-top:20px">
@@ -384,7 +397,9 @@ flowchart LR
           <tr><td>Vagas</td><td>"VAGO", sem explicação</td><td>Cada vaga informa o motivo</td></tr>
           <tr><td>Identidade</td><td>Pela posição na lista; nomes repetidos permitidos</td><td>Identificador único; nome duplicado bloqueado</td></tr>
           <tr><td>Dados</td><td>Gravação direta, podia corromper; período se perdia</td><td>Gravação atômica; período salvo; lê o formato antigo</td></tr>
-          <tr><td>Uso</td><td>Só no computador com Python instalado</td><td>Navegador, com instalação por Docker em um clique</td></tr>
+          <tr><td>Uso</td><td>Só no computador com Python instalado</td><td>Navegador e app no celular, em minhaescala192.vercel.app</td></tr>
+          <tr><td>Disponibilidade</td><td>Só com o computador ligado</td><td>24 horas na nuvem, com endereço fixo</td></tr>
+          <tr><td>Trocas de plantão</td><td>Combinadas fora do sistema e repassadas à mão</td><td>Feitas pela equipe no app, com as regras checadas e auditoria</td></tr>
           <tr><td>Ajuste manual</td><td>Editar a planilha depois, sem checar as regras</td><td>Revisão na própria escala, com conflitos apontados na hora e desfazer</td></tr>
           <tr><td>Leitura da escala</td><td>Tabela única, uma linha por turno</td><td>Cores por profissional; PDF de uma página com DIA e NOITE lado a lado</td></tr>
           <tr><td>Reaproveitamento</td><td>A escala só existia no papel ou no PDF</td><td>O PDF reimporta a escala para edição, inclusive em outro computador</td></tr>
@@ -402,7 +417,9 @@ flowchart LR
       <p><strong>Guloso com olhar adiante, em vez de um solver.</strong> Um solver de otimização (programação inteira) encontraria o ótimo global, mas acrescenta uma dependência pesada e fica mais difícil de explicar para a coordenação. O guloso com critérios ordenados roda em milissegundos, é determinístico, e cada escolha pode ser explicada em uma frase.</p>
       <p><strong>Domínio puro e testável.</strong> As regras não conhecem Flask, Tkinter nem JSON. Isso permitiu escrever testes que provam cada regra. Um deles falha de propósito se o "olhar adiante" for desligado.</p>
       <p><strong>Frontend sem build.</strong> HTML, CSS e JavaScript puros, servidos pelo próprio Flask. Não há Node, bundler nem dependências de frontend para manter.</p>
-      <p><strong>JSON em vez de banco de dados.</strong> Para uma base com uma coordenação, um arquivo legível é suficiente, simples de copiar como backup e compatível com a versão anterior do app.</p>
+      <p><strong>De arquivo para Postgres, sem reescrever o domínio.</strong> Enquanto o app rodava num único processo, um arquivo JSON bastava. Na Vercel não há disco e cada acesso pode cair numa cópia diferente do app. O webapp passou a falar com quatro interfaces (escala, usuários, auditoria e bloqueio de login), e cada uma ganhou uma versão em Postgres. A escala virou um documento JSONB no mesmo formato do arquivo: migrar e fazer backup é um comando.</p>
+      <p><strong>Trava no banco, não na memória.</strong> Cada gravação roda numa transação com trava do Postgres, então duas trocas simultâneas, mesmo em cópias diferentes do app, não se sobrescrevem. Um teste dispara duas cópias gravando em paralelo e confere que nada se perde.</p>
+      <p><strong>Do PC para a nuvem por um motivo de uso.</strong> No Kubernetes do próprio PC, com túnel temporário, o endereço mudava a cada reinício e o app instalado nos celulares parava de abrir. A Vercel deu endereço fixo e funcionamento 24 horas, sem custo para uma equipe deste tamanho. O fuso de São Paulo ficou explícito no código, porque o servidor roda em UTC.</p>
       <p><strong>UX pensada para quem usa.</strong> Pincel com arrastar em vez de clicar várias vezes por turno; atalhos de teclado de 1 a 4; layout pensado para o celular, instalável como app (PWA); identidade visual do SAMU.</p>
       <p><strong>Proposta, não imposição.</strong> O algoritmo sugere; a coordenação decide. A revisão avisa, mas não bloqueia: uma exceção combinada com a equipe vira um conflito visível, não um obstáculo. Rascunho e escala final ficam separados, então editar não mexe na versão publicada até a confirmação.</p>
       <p><strong>A equipe troca plantões, com o descanso checado na hora.</strong> Depois de publicada, cada profissional entra com nome e matrícula, no celular, e troca quem está num plantão. O editor mostra quem pode assumir e quem tem impedimento, com o motivo ("Saindo do plantão da noite anterior", "Já tem outro plantão neste dia", "Tem plantão de dia logo após esta noite"). O servidor recusa a troca se outra pessoa mudou a mesma posição antes, e tudo vai para a auditoria da coordenação.</p>
@@ -412,15 +429,15 @@ flowchart LR
       <p><strong>Cor como apoio, não como único sinal.</strong> Cada profissional tem uma cor, mas o nome e a função estão sempre escritos, com texto escuro sobre fundo claro. O resumo de plantões por pessoa fica só para a coordenação, fora do PDF e da impressão.</p>
     </div>
     <div class="chips" style="margin-top:20px">
-      <span class="chip">Python 3.12</span><span class="chip">Flask</span><span class="chip">Gunicorn</span><span class="chip">fpdf</span><span class="chip">JavaScript (ES modules)</span><span class="chip">CSS Grid</span><span class="chip">Docker Compose</span><span class="chip">Kubernetes</span><span class="chip">PWA</span><span class="chip">pytest</span><span class="chip">Tkinter</span>
+      <span class="chip">Python 3.12</span><span class="chip">Flask</span><span class="chip">PostgreSQL (Neon)</span><span class="chip">psycopg 3</span><span class="chip">Vercel</span><span class="chip">Gunicorn</span><span class="chip">fpdf</span><span class="chip">JavaScript (ES modules)</span><span class="chip">CSS Grid</span><span class="chip">Docker Compose</span><span class="chip">Kubernetes</span><span class="chip">PWA</span><span class="chip">pytest</span><span class="chip">Tkinter</span>
     </div>
   </section>
 
   <section aria-labelledby="rodar">
     <div class="section-head">
       <span class="kicker">Como rodar</span>
-      <h2 id="rodar">Instalação em um clique</h2>
-      <p class="muted prose">Com o Docker Desktop instalado, basta um duplo clique em <code>iniciar.bat</code> no Windows (ou rodar <code>./iniciar.sh</code> no macOS e no Linux). O navegador abre sozinho em <code>localhost:8080</code>.</p>
+      <h2 id="rodar">Acessar ou rodar uma cópia</h2>
+      <p class="muted prose">A equipe usa direto em <a href="https://minhaescala192.vercel.app">minhaescala192.vercel.app</a> (acesso com nome e matrícula). Para rodar uma cópia própria, com o Docker Desktop instalado, basta um duplo clique em <code>iniciar.bat</code> no Windows (ou rodar <code>./iniciar.sh</code> no macOS e no Linux). O navegador abre sozinho em <code>localhost:8080</code>.</p>
     </div>
 <div class="term"><span class="c"># ou, pelo terminal</span>
 git clone https://github.com/CarlosAlvesSantosJr/escalas-de-plantao.git
@@ -435,10 +452,10 @@ docker compose up -d --build
       <h2 id="proximos">O que vem depois</h2>
     </div>
     <ul class="stack prose muted" style="padding-left:20px;margin:0">
-      <li>Aprovação opcional da coordenação para trocas feitas pela equipe.</li>
-      <li>Várias bases do SAMU no mesmo sistema.</li>
-      <li>Endereço fixo (túnel nomeado ou domínio próprio) para o app instalado.</li>
-      <li>Envio da escala por WhatsApp ou e-mail.</li>
+      <li>"Meus plantões": filtro pessoal e exportação para a agenda do celular (.ics).</li>
+      <li>Pedido de troca com aceite do colega e notificações no celular.</li>
+      <li>Folgas pedidas pela própria equipe, com aprovação da coordenação.</li>
+      <li>Justiça entre meses e peso de feriados no algoritmo.</li>
     </ul>
   </section>
 </main>

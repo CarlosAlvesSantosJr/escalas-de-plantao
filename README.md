@@ -1,33 +1,61 @@
 <div align="center">
 
-<img src="docs/img/samu.jpg" alt="SAMU 192" width="360">
+<img src="docs/img/samu.jpg" alt="SAMU 192" width="300">
 
 # Escala de Plantão · SAMU 192
 
-**Gerador automático de escalas para equipes de ambulância.**
-Monta duplas de enfermagem e socorrista para cada turno, respeita folgas, férias e descanso pós-noite, e divide os plantões de forma justa. A equipe consulta e troca plantões pelo celular, como um app.
+**Gerador automático de escalas de plantão para equipes de ambulância, em uso diário pela equipe do SAMU 192.**<br>
+Monta as duplas de enfermagem e socorrista de cada turno, respeita folgas, férias e descanso pós-noite, e deixa a própria equipe trocar plantões pelo celular, com as regras checadas na hora.
+
+### 🔗 [minhaescala192.vercel.app](https://minhaescala192.vercel.app)
+
+[![Acessar o app](https://img.shields.io/badge/▶%20Acessar%20o%20app-minhaescala192.vercel.app-C8102E?style=for-the-badge)](https://minhaescala192.vercel.app)
+![Em produção](https://img.shields.io/badge/status-em%20produção-1E8E5A?style=for-the-badge)
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Flask](https://img.shields.io/badge/Flask-API-000000?logo=flask&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-4169E1?logo=postgresql&logoColor=white)
+![Vercel](https://img.shields.io/badge/Vercel-produção-000000?logo=vercel&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-pronto-2496ED?logo=docker&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-pronto-326CE5?logo=kubernetes&logoColor=white)
 ![PWA](https://img.shields.io/badge/PWA-instalável-5A0FC8?logo=pwa&logoColor=white)
-![Testes](https://img.shields.io/badge/testes-48%20passando-1E8E5A)
+![Testes](https://img.shields.io/badge/testes-80%20passando-1E8E5A)
 ![Licença](https://img.shields.io/badge/licença-MIT-C8102E)
 
-[Funcionalidades](#-funcionalidades) · [Perfis e acessos](#-acesso-perfis-e-auditoria) · [Troca de plantão](#-troca-de-plantão-quem-pode-assumir) · [Celular e app](#-no-celular-e-como-app) · [Algoritmo](#-como-o-algoritmo-decide) · [Arquitetura e API](#%EF%B8%8F-arquitetura) · [Kubernetes](k8s/README.md) · [Estudo de caso](docs/PORTFOLIO.md)
+[Em uso](#-em-uso-pela-equipe) · [Funcionalidades](#-funcionalidades) · [Perfis](#-acesso-perfis-e-auditoria) · [Troca de plantão](#-troca-de-plantão-quem-pode-assumir) · [Algoritmo](#-como-o-algoritmo-decide) · [Arquitetura](#%EF%B8%8F-arquitetura) · [Implantação](#-implantação) · [Estudo de caso](docs/PORTFOLIO.md)
 
 </div>
 
 ---
 
-![Escala final vista pela coordenação (ADM)](docs/img/escala.jpg)
+![Escala no computador (coordenação) e no celular (equipe)](docs/img/capa.jpg)
 
-## 🚑 O problema
+<sub>Imagens com nomes fictícios. O acesso ao app é restrito à equipe (login com nome e matrícula).</sub>
+
+## 🚑 Em uso pela equipe
+
+Este não é um projeto de demonstração: **o sistema está em produção e é usado no dia a dia** pela coordenação e pela equipe de plantão do SAMU 192 de Tubarão-SC.
+
+| Quem | Como usa |
+|---|---|
+| **Coordenação (ADM)** | Monta a escala do mês: define o período, marca férias e indisponibilidades, gera a proposta automática, revisa e publica. Acompanha pela auditoria quem trocou cada plantão. |
+| **Equipe (enfermagem e socorristas)** | Abre o app no celular, vê a escala do mês atual e do seguinte e **troca plantões direto pelo app**: o sistema mostra quem pode assumir e quem não pode, e por quê. |
+
+**O que mudou na rotina:**
+- **Trocas de plantão sem papel, sem planilha e sem grupo de mensagens.** Quem precisa trocar abre o plantão no celular e vê na hora os colegas que podem assumir sem quebrar o descanso. A troca aparece para todos em segundos, com o nome de quem trocou.
+- **Nenhuma troca quebra o descanso sem que se saiba.** As regras (um plantão por dia, descanso depois da noite, férias) são checadas a cada troca. Uma exceção combinada pode ser feita, mas fica marcada como conflito para a coordenação.
+- **A escala do mês sai em minutos**, com as 124 posições de um mês de 31 dias preenchidas e os plantões, noites e fins de semana divididos de forma equilibrada.
+- **Tudo registrado:** cada entrada no sistema e cada troca ficam na auditoria por 30 dias.
+
+**Hoje:** 10 profissionais na escala (5 de enfermagem e 5 socorristas) e 11 usuários com acesso. O app roda na **Vercel**, com os dados num **Postgres da Neon**, os dois em São Paulo, e funciona 24 horas sem depender de nenhum computador ligado. A equipe instala no celular como app (PWA).
+
+## 🩺 O problema
 
 O SAMU 192 funciona 24 horas por dia. Cada dia tem dois turnos, **DIA** e **NOITE**, e cada turno precisa de uma equipe completa na viatura: **um(a) profissional de enfermagem e um(a) socorrista**. Num mês de 31 dias são 124 posições a preencher.
 
-Montar essa escala à mão significa cruzar a disponibilidade de cada pessoa, turno a turno, sem deixar viatura descoberta, sem colocar ninguém para trabalhar exausto e dividindo noites e fins de semana de forma justa. Este projeto automatiza esse trabalho e deixa a palavra final com a coordenação: a proposta automática pode ser revisada e ajustada à mão antes de ser publicada. Depois de publicada, a própria equipe troca plantões entre si, com as regras de descanso checadas na hora e tudo registrado.
+Montar essa escala à mão significa cruzar a disponibilidade de cada pessoa, turno a turno, sem deixar viatura descoberta, sem colocar ninguém para trabalhar exausto e dividindo noites e fins de semana de forma justa. E depois de pronta, a escala muda o mês todo: cada troca entre colegas precisava ser combinada, conferida contra as regras de descanso e repassada a todos.
+
+Este projeto automatiza a montagem e leva as trocas para o celular. A palavra final continua com a coordenação: a proposta automática pode ser revisada e ajustada à mão antes de ser publicada.
 
 ## ✨ Funcionalidades
 
@@ -36,8 +64,8 @@ Montar essa escala à mão significa cruzar a disponibilidade de cada pessoa, tu
 | **1. Período** | Define o ciclo da escala, com atalhos como "Próximo mês" e um resumo de dias e turnos. |
 | **2. Equipe** | Cadastro de profissionais de enfermagem e socorristas, com validação, busca e um alerta quando a equipe é pequena demais para garantir descanso. |
 | **3. Disponibilidade** | Calendário por pessoa com "pincel": **Indisponível**, **Preferencial** ou **Férias**. Clique ou arraste sobre os turnos; clique na data para o dia inteiro ou no dia da semana para todas as ocorrências. Salva sozinho. |
-| **4. Revisão** | Proposta automática que pode ser ajustada à mão: clique num nome, veja quem pode assumir e o impedimento de quem não pode, troque ou deixe vago. Conflitos com as regras aparecem na hora, com desfazer (Ctrl+Z). Nada vai para a escala final sem confirmação. |
-| **5. Escala** | Versão confirmada, com uma cor por profissional, legenda que destaca os plantões de cada pessoa, indicadores e visão em calendário ou lista. Abas **Mês atual** e **Mês seguinte** (o ADM vê também as anteriores e as futuras). PDF, impressão, exportação e importação. |
+| **4. Revisão** | Proposta automática que pode ser ajustada à mão: clique num nome, veja quem pode assumir e o impedimento de quem não pode, troque ou deixe vago. Conflitos aparecem na hora, com desfazer (Ctrl+Z). Nada vai para a escala final sem confirmação. |
+| **5. Escala** | Versão publicada, com uma cor por profissional, legenda que destaca os plantões de cada pessoa, indicadores e visão em calendário ou lista. Abas **Mês atual** e **Mês seguinte**. PDF, impressão, exportação e importação. |
 
 <table>
   <tr>
@@ -53,14 +81,14 @@ Montar essa escala à mão significa cruzar a disponibilidade de cada pessoa, tu
     <td><img src="docs/img/pdf.jpg" alt="PDF da escala com DIA e NOITE lado a lado"></td>
   </tr>
   <tr>
-    <td align="center"><sub>4. Revisão: troca manual com o impedimento de cada pessoa</sub></td>
+    <td align="center"><sub>4. Revisão: ajuste manual com o impedimento de cada pessoa</sub></td>
     <td align="center"><sub>5. PDF para a equipe: DIA e NOITE lado a lado</sub></td>
   </tr>
 </table>
 
 ## 🔐 Acesso, perfis e auditoria
 
-Cada pessoa entra com **nome e matrícula**. A matrícula não fica guardada em texto: o arquivo `usuarios.json` guarda só o hash (scrypt). Depois de 5 tentativas erradas em 15 minutos, o acesso daquele nome ou IP fica bloqueado por um tempo.
+Cada pessoa entra com **nome e matrícula**. A matrícula não fica guardada em texto, só o hash (scrypt). Depois de 5 tentativas erradas em 15 minutos, o acesso daquele nome ou IP fica bloqueado por um tempo.
 
 Há dois perfis. **As permissões são aplicadas no servidor**: as rotas da coordenação respondem 403 para o perfil Usuário, e os dados da coordenação nem são enviados a ele.
 
@@ -74,10 +102,10 @@ Há dois perfis. **As permissões são aplicadas no servidor**: as rotas da coor
 | Conflitos com as regras e distribuição de plantões por profissional | ✅ | ❌ |
 | Disponibilidade da equipe (férias, indisponível, preferencial) | ✅ | ❌ |
 | Escalas anteriores e futuras | ✅ | ❌ |
-| Período, equipe, disponibilidade, gerar proposta, Revisão e confirmar | ✅ | ❌ |
+| Período, equipe, disponibilidade, gerar proposta, Revisão e publicar | ✅ | ❌ |
 | Baixar PDF, imprimir, exportar e importar | ✅ | ❌ |
 | Auditoria (com IPs) e exportação em CSV | ✅ | ❌ |
-| Previsão do tempo, app instalável e atualização em tempo real | ✅ | ✅ |
+| Previsão do tempo, app instalável e atualização automática | ✅ | ✅ |
 
 <table>
   <tr>
@@ -95,28 +123,16 @@ Há dois perfis. **As permissões são aplicadas no servidor**: as rotas da coor
     <td colspan="2" align="center"><sub>No celular, lado a lado: <b>ADM</b> (etapas, escala futura, botões, aviso de revisão em andamento) × <b>Usuário</b> (só as duas escalas)</sub></td>
   </tr>
   <tr>
-    <td colspan="2"><img src="docs/img/auditoria.jpg" alt="Auditoria com entradas e trocas de plantão"></td>
+    <td colspan="2"><img src="docs/img/auditoria.jpg" alt="Auditoria com as trocas de plantão"></td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><sub>Auditoria do ADM: quem entrou e quem trocou cada plantão, nos últimos 30 dias</sub></td>
+    <td colspan="2" align="center"><sub>Auditoria do ADM: quem trocou cada plantão, quando e de quem para quem, nos últimos 30 dias</sub></td>
   </tr>
 </table>
 
-- **Auditoria** (só ADM): entradas, saídas, tentativas de acesso falhas e cada troca de plantão, no formato "Qua 02/12 DIA · Enfermagem: MONICA → ERALDO", com usuário, data, hora e IP. Dá para filtrar por pessoa ou por tipo e exportar em CSV. Ficam guardados os **últimos 30 dias**; eventos mais antigos são apagados automaticamente (ajustável pela variável `ESCALA_AUDITORIA_DIAS`).
-- **Tempo real:** cada tela consulta o servidor a cada 3 segundos e se atualiza sozinha quando alguém troca um plantão, com um aviso de quem trocou e um destaque piscando na posição. Uma aba que ficou mais de 2 minutos escondida é recarregada ao voltar.
+- **Auditoria** (só ADM): entradas, saídas, tentativas de acesso falhas e cada troca de plantão, no formato "Qua 02/12 DIA · Enfermagem: EMMA → OLIVER", com usuário, data, hora e IP. Dá para filtrar por pessoa ou por tipo e exportar em CSV. Ficam guardados os **últimos 30 dias**; eventos mais antigos são apagados automaticamente.
+- **Atualização automática:** as telas abertas percebem quando alguém troca um plantão, se atualizam sozinhas e mostram quem trocou, com um destaque piscando na posição.
 - **Versão nova:** quando uma versão nova do sistema é publicada, as telas abertas recarregam sozinhas.
-- **Uma pessoa por navegador:** se outra pessoa entrar no mesmo navegador, as abas abertas recarregam com o nome dela. Para testar dois usuários no mesmo computador, use uma janela anônima.
-
-**Criar os usuários** (antes do primeiro acesso):
-
-```bash
-# lista.csv com uma pessoa por linha: NOME;MATRICULA;PAPEL  (PAPEL = ADMIN ou vazio)
-python usuarios_cli.py gerar lista.csv dados/usuarios.json
-rm lista.csv
-
-python usuarios_cli.py adicionar dados/usuarios.json "Nome"     # inclui ou troca a matrícula de alguém
-python usuarios_cli.py desativar dados/usuarios.json "Nome"     # tira o acesso
-```
 
 ## 🔁 Troca de plantão: quem pode assumir
 
@@ -128,11 +144,11 @@ Esta é a parte que a equipe mais usa. Clicar num nome da escala abre o editor d
 
 <table>
   <tr>
-    <td width="68%"><img src="docs/img/troca-usuario.jpg" alt="Editor de troca de plantão visto pelo usuário"></td>
+    <td width="68%"><img src="docs/img/troca-usuario.jpg" alt="Editor de troca de plantão visto pela usuária"></td>
     <td width="32%"><img src="docs/img/celular.jpg" alt="Escala e troca no celular"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Qua 02/12, DIA, Enfermagem. <b>BEATRIZ</b> fez a NOITE de 01/12 e está saindo dela; <b>TATHIANA</b> já tem a NOITE de 02/12</sub></td>
+    <td align="center"><sub>Emma quer passar o <b>próprio</b> plantão de Qua 02/12, DIA. <b>OLIVER</b> e <b>GRACE</b> podem assumir; <b>AVA</b> já tem outro plantão no dia e <b>OLIVIA</b> está saindo da noite anterior</sub></td>
     <td align="center"><sub>No celular: escala em cartões e o mesmo editor</sub></td>
   </tr>
 </table>
@@ -163,49 +179,35 @@ flowchart LR
 **Por trás:**
 - **As mesmas regras em todo lugar.** O algoritmo que gera a escala, a Revisão do ADM e a troca feita pela equipe usam a mesma função. Não existe uma regra na tela e outra no servidor.
 - **Avisa, não bloqueia.** A escolha é de quem conhece a situação, e o conflito fica visível para a coordenação.
-- **Ninguém sobrescreve ninguém.** O editor guarda quem estava na posição quando foi aberto. Se outra pessoa trocou antes, o servidor recusa (409) e a tela se atualiza.
-- **Tudo registrado.** Cada troca vai para a auditoria e aparece nas outras telas em até 3 segundos.
+- **Ninguém sobrescreve ninguém.** O editor guarda quem estava na posição quando foi aberto. Se outra pessoa trocou antes, o servidor recusa (409) e a tela se atualiza. No banco, cada gravação roda numa transação com trava, então duas trocas ao mesmo tempo são atendidas uma de cada vez.
+- **Tudo registrado.** Cada troca vai para a auditoria e aparece nas outras telas abertas.
 - **Privacidade.** O usuário vê só "Disponível"; o total de plantões de cada colega é informação do ADM.
 
 O detalhamento, com diagramas de sequência, está em **[docs/ARQUITETURA.md](docs/ARQUITETURA.md#4-lógica-da-troca-de-plantão)**.
 
 ## 📅 Mês atual e mês seguinte
 
-A equipe vê sempre duas abas, **Mês atual** e **Mês seguinte**, e pode trocar plantões em qualquer uma para se organizar com antecedência. O par **só avança quando o mês vira e o ADM confirma uma escala nova**:
+A equipe vê sempre duas abas, **Mês atual** e **Mês seguinte**, e pode trocar plantões em qualquer uma para se organizar com antecedência. O par **só avança quando o mês vira e o ADM publica uma escala nova**:
 
 | Situação | Mês atual | Mês seguinte |
 |---|---|---|
-| Novembro, com Dezembro e Janeiro confirmados | Dezembro | Janeiro |
-| Virou janeiro, Fevereiro ainda não confirmado | Dezembro | Janeiro |
-| Virou janeiro **e** o ADM confirmou Fevereiro | Janeiro | Fevereiro |
+| Novembro, com Dezembro e Janeiro publicados | Dezembro | Janeiro |
+| Virou janeiro, Fevereiro ainda não publicado | Dezembro | Janeiro |
+| Virou janeiro **e** o ADM publicou Fevereiro | Janeiro | Fevereiro |
 
-Escalas confirmadas antes da hora ficam como "futura" e as que saíram do par como "anterior"; essas só o ADM vê. Confirmar de novo um período substitui só aquela escala. Enquanto não houver uma segunda escala, a aba do mês seguinte aparece como "ainda não publicada".
+Escalas publicadas antes da hora ficam como "futura" e as que saíram do par como "anterior"; essas só o ADM vê. A virada do mês segue o horário de São Paulo, mesmo com o servidor em UTC.
 
 ## 📱 No celular e como app
 
-- **Responsivo:** no celular a escala abre em lista, com um cartão por dia (DIA e NOITE, enfermagem e socorrista lado a lado), sem rolagem lateral. O topo deixa o símbolo do SAMU sempre visível à esquerda e põe título, período, equipe e clima numa coluna à direita.
-- **Previsão do tempo:** o topo mostra o tempo de **Tubarão-SC** (agora, máxima e mínima, chance de chuva e os próximos 3 dias), pela API pública e gratuita da [Open-Meteo](https://open-meteo.com), sem chave. Atualiza a cada 30 minutos; se a API estiver fora do ar, o quadro some e o resto funciona normalmente.
-- **App instalável (PWA):** "Adicionar à tela inicial" no Android ou iPhone, ou o ícone de instalar no Chrome/Edge do computador. Abre em tela cheia, com o ícone do SAMU. O service worker guarda só CSS, JS e imagens; a escala, o login e a auditoria vêm sempre do servidor, e sem internet aparece uma tela "Sem conexão". A instalação exige HTTPS (Kubernetes com túnel ou domínio) ou `localhost`.
+- **Responsivo:** no celular a escala abre em lista, com um cartão por dia (DIA e NOITE, enfermagem e socorrista lado a lado), sem rolagem lateral. O topo deixa o símbolo do SAMU sempre visível.
+- **App instalável (PWA):** em [minhaescala192.vercel.app](https://minhaescala192.vercel.app), "Adicionar à tela inicial" no Android ou iPhone. Abre em tela cheia, com o ícone do SAMU. O service worker guarda só CSS, JS e imagens; a escala, o login e a auditoria vêm sempre do servidor, e sem internet aparece uma tela "Sem conexão".
+- **Previsão do tempo:** o topo mostra o tempo de **Tubarão-SC** (agora, máxima e mínima, chance de chuva e os próximos 3 dias), pela API pública e gratuita da [Open-Meteo](https://open-meteo.com).
 
 ## 📄 O PDF e a importação
 
-Uma página por mês, com uma linha por dia: o turno **DIA** à esquerda e a **NOITE** à direita, cada um com **Enfermagem** e **Socorrista**. Cada profissional mantém a mesma cor da tela, e os fins de semana aparecem em destaque. O resumo de plantões por profissional fica só no sistema.
+Uma página por mês, com uma linha por dia: o turno **DIA** à esquerda e a **NOITE** à direita, cada um com **Enfermagem** e **Socorrista**. Cada profissional mantém a mesma cor da tela, e os fins de semana aparecem em destaque.
 
-O PDF carrega os dados da escala embutidos: na Revisão ou na Escala, **Importar** aceita o PDF baixado do sistema ou o `.json` do botão **Exportar**. A escala abre na Revisão; quem não estiver na equipe é cadastrado automaticamente. É assim que se leva uma escala para outro computador.
-
-## 🚀 Como rodar
-
-```bash
-git clone https://github.com/CarlosAlvesSantosJr/escalas-de-plantao.git
-cd escalas-de-plantao
-docker compose up -d --build        # http://localhost:8080 · dados em ./dados
-```
-
-No Windows, basta um duplo clique em `iniciar.bat` (e `parar.bat` para desligar). Veja o [guia de instalação](docs/INSTALACAO.md).
-
-**Kubernetes:** os manifests estão em [`k8s/`](k8s/): 1 réplica, disco persistente, usuários num Secret, pod sem root com sistema de arquivos somente leitura. Três modos: no próprio PC com Cloudflare Tunnel, com endereço temporário (`https://…trycloudflare.com`) ou fixo no seu domínio (túnel nomeado, `k8s/tunel-fixo/`), ou na nuvem/VPS com HTTPS do Let's Encrypt. Passo a passo em **[k8s/README.md](k8s/README.md)**.
-
-**Vercel + Neon (teste, ramo `vercel-neon`):** roda sem PC ligado, com os dados num Postgres gratuito da Neon em vez de arquivos. O app escolhe o modo sozinho pela variável `DATABASE_URL`. Passo a passo em **[docs/VERCEL.md](docs/VERCEL.md)**.
+O PDF carrega os dados da escala embutidos: **Importar** aceita o PDF baixado do sistema ou o `.json` do botão **Exportar**. É assim que se leva uma escala para outra instalação.
 
 ## 🧠 Como o algoritmo decide
 
@@ -235,85 +237,52 @@ flowchart LR
     C --> D["Escala o primeiro<br/>e atualiza contadores"]
 ```
 
-**Resultado com dados reais** (5 profissionais de enfermagem e 5 socorristas, outubro de 2026, dados anonimizados): 100% das 124 posições preenchidas, e a diferença máxima de plantões na enfermagem caiu de **5 para 3** em relação ao algoritmo original.
+**Resultado com os dados da equipe** (5 profissionais de enfermagem e 5 socorristas, outubro de 2026): 100% das 124 posições preenchidas, e a diferença máxima de plantões na enfermagem caiu de **5 para 3** em relação ao algoritmo original.
 
 ## 🏗️ Arquitetura
 
-Um núcleo de domínio puro e testável (`escala/`), usado pela API web e pela versão desktop. O documento completo, com **UML de classes, diagramas de sequência, ciclo de vida da escala, matriz de permissões e segurança**, está em **[docs/ARQUITETURA.md](docs/ARQUITETURA.md)**.
+Um núcleo de domínio puro e testável (`escala/`), que não sabe onde os dados ficam. Em produção os dados vão para o Postgres; no Docker, no Kubernetes e no app desktop, para arquivos JSON. O mesmo código escolhe o modo pela variável `DATABASE_URL`.
 
 ```mermaid
 flowchart LR
-    PWA["Celular / navegador<br/>PWA · HTML · CSS · JS"] -- "HTTPS + JSON" --> EDGE["Cloudflare Tunnel<br/>ou Ingress"]
+    PWA["Celular / navegador<br/>PWA · HTML · CSS · JS"] -- "HTTPS + JSON" --> FN["Vercel · São Paulo<br/>Flask (webapp.py)<br/>perfis · auditoria"]
     PWA -- "previsão do tempo" --> OM["Open-Meteo"]
-    EDGE --> API["webapp.py<br/>Flask + Gunicorn<br/>perfis · auditoria"]
-    TK["app.py<br/>Tkinter"] --> CORE
-    API --> CORE["escala/<br/>domínio · algoritmo · avaliação · PDF"]
-    CORE --> DB[("/data<br/>dados_escala.json · auditoria.jsonl")]
-    SEC[["Secret<br/>usuarios.json (hash)"]] --> API
+    FN --> CORE["escala/<br/>domínio · algoritmo · avaliação · PDF"]
+    FN -- "transação + trava" --> PG[("Neon Postgres<br/>escala · usuários · auditoria")]
+    TK["app.py · Docker · Kubernetes"] -. "modo arquivo" .-> CORE
+    TK -.-> FS[("dados_escala.json<br/>auditoria.jsonl")]
 ```
 
-```mermaid
-classDiagram
-    direction LR
-    class EstadoApp {
-        +funcionarios
-        +periodo
-        +rascunho
-        +escalas
-        +classificar(hoje)
-    }
-    class Escala {
-        +periodo
-        +plantoes
-        +confirmada_em
-    }
-    class Plantao {
-        +data
-        +turno
-        +equipe
-    }
-    class Funcionario {
-        +nome
-        +cargo
-        +disponibilidade
-        +status(dia, turno)
-    }
-    class Candidato {
-        +funcionario
-        +preferencial
-        +impedimentos
-    }
-    class Usuario {
-        +nome
-        +papel
-        +hash_matricula
-    }
-    EstadoApp o-- Funcionario
-    EstadoApp o-- Escala
-    Escala *-- Plantao
-    Plantao o-- Funcionario
-    Candidato --> Funcionario
-```
+| Decisão | Por quê |
+|---|---|
+| **Vercel + Neon** em produção | Funciona 24 h sem um PC ligado e com endereço fixo (o app instalado nos celulares não quebra), sem custo para uma equipe deste tamanho. Os dois em São Paulo. |
+| **A escala como um documento JSONB** | O domínio já é um agregado lido e gravado inteiro (poucos KB). O formato é o mesmo do arquivo, então migrar e fazer backup é um comando. |
+| **Trava do Postgres em cada gravação** | Na Vercel, cada acesso pode cair numa cópia diferente do app; a trava garante que duas trocas simultâneas não se sobrescrevam. |
+| **Regras num lugar só** (`avaliacao.py`) | O algoritmo, a Revisão e a troca da equipe usam a mesma função de impedimentos. |
+| **Frontend sem framework e sem build** | HTML, CSS e JS puros: leve no celular, nada para compilar, cache controlado pela versão dos arquivos. |
+| **Permissões no servidor** | O perfil Usuário não recebe dados da coordenação; não depende da tela esconder nada. |
+
+O documento completo, com **UML de classes, diagramas de sequência, ciclo de vida da escala, matriz de permissões, persistência e segurança**, está em **[docs/ARQUITETURA.md](docs/ARQUITETURA.md)**.
 
 ```
 escala/
 ├── dominio.py         Modelos (Funcionario, Periodo, Plantao, Escala) e enums (Cargo, Turno, Status)
 ├── algoritmo.py       Geração da escala, sem I/O
 ├── avaliacao.py       Regras: impedimentos, candidatos, vagas, conflitos e estatísticas
-├── repositorio.py     Persistência JSON atômica e papéis das escalas (mês atual/seguinte)
+├── repositorio.py     Estado da app, papéis das escalas (mês atual/seguinte) e gravação em JSON
+├── banco.py           As mesmas interfaces sobre o Postgres (escala, usuários, auditoria, login)
 ├── usuarios.py        Login (matrícula em hash), limite de tentativas e auditoria (30 dias)
+├── relogio.py         Data e hora no fuso de São Paulo
 └── relatorio_pdf.py   PDF com DIA e NOITE lado a lado, com os dados embutidos para reimportar
-static/                Frontend web (sem framework, sem build)
-├── index.html · login.html · js/app.js · css/style.css
-├── js/clima.js        Previsão do tempo (Open-Meteo)
-├── manifest.webmanifest · sw.js · offline.html · js/pwa.js   App instalável (PWA)
-└── img/icon-*.png     Ícones do app
-tests/                 48 testes: regras, API, perfis, mês atual/seguinte, auditoria e PWA
-docs/                  Arquitetura, estudo de caso, guia de instalação e imagens
+static/                Frontend web (sem framework, sem build) e PWA
+tests/                 80 testes: regras, API, perfis, concorrência, Postgres, auditoria e PWA
+docs/                  Arquitetura, estudo de caso, guias e imagens
 webapp.py              API REST Flask (login, permissões por perfil, auditoria)
-usuarios_cli.py        Cria e mantém o arquivo de usuários
+vercel_app.py          Entrada na Vercel · pyproject.toml · vercel.json · .vercelignore
+banco_cli.py           Envia dados para o banco e baixa backups
+usuarios_cli.py        Cria e mantém os usuários
 k8s/                   Manifests do Kubernetes e guia de implantação
-app.py                 Versão desktop
+app.py                 Versão desktop (Tkinter)
 Dockerfile · docker-compose.yml · iniciar.bat · iniciar.sh · parar.bat
 ```
 
@@ -326,11 +295,11 @@ Dockerfile · docker-compose.yml · iniciar.bat · iniciar.sh · parar.bat
 | `GET` | `/api/eu` | Usuário logado e perfil | Todos |
 | `GET` | `/api/versao` | Versão dos dados e última troca (para atualizar as telas) | Todos |
 | `GET` | `/api/estado` | Período, equipe, rascunho e escalas visíveis com o papel de cada uma | Todos (filtrado) |
-| `GET` | `/api/escala[?inicio=AAAA-MM-DD]` | Uma escala confirmada (sem `inicio`, a do mês atual) | Todos (filtrado) |
+| `GET` | `/api/escala[?inicio=AAAA-MM-DD]` | Uma escala publicada (sem `inicio`, a do mês atual) | Todos (filtrado) |
 | `PATCH` | `/api/escala[?inicio=…]` | Troca profissionais, com `esperado` contra sobrescrita e auditoria | Todos |
 | `GET` | `/api/escala/candidatos?data&turno&cargo` | Quem pode assumir e os impedimentos de cada um | Todos (ADM vê o total) |
-| `POST` | `/api/escala` | Confirma o rascunho | ADM |
-| `POST` | `/api/escala/editar` | Abre uma cópia da escala final para revisão | ADM |
+| `POST` | `/api/escala` | Publica o rascunho | ADM |
+| `POST` | `/api/escala/editar` | Abre uma cópia da escala publicada para revisão | ADM |
 | `POST` | `/api/escala/importar` | Importa `.json` ou PDF gerado pelo sistema | ADM |
 | `GET` | `/api/escala.pdf` · `/api/escala.json` | Baixa a escala em PDF ou JSON | ADM |
 | `PUT` | `/api/periodo` | Define o período (até 92 dias) | ADM |
@@ -343,10 +312,58 @@ Dockerfile · docker-compose.yml · iniciar.bat · iniciar.sh · parar.bat
 
 </details>
 
+## 🚀 Implantação
+
+| Modo | Endereço | Dados | Guia |
+|---|---|---|---|
+| **Produção: Vercel + Neon** | **[minhaescala192.vercel.app](https://minhaescala192.vercel.app)** | Postgres (Neon, São Paulo) | [docs/VERCEL.md](docs/VERCEL.md) |
+| Kubernetes | Cloudflare Tunnel no próprio PC, ou nuvem com Ingress e Let's Encrypt | Disco persistente (PVC) | [k8s/README.md](k8s/README.md) |
+| Docker Compose | `http://localhost:8080` | Pasta `dados/` | [docs/INSTALACAO.md](docs/INSTALACAO.md) |
+
+**Rodar no seu computador:**
+
+```bash
+git clone https://github.com/CarlosAlvesSantosJr/escalas-de-plantao.git
+cd escalas-de-plantao
+docker compose up -d --build        # http://localhost:8080 · dados em ./dados
+```
+
+No Windows, basta um duplo clique em `iniciar.bat` (e `parar.bat` para desligar).
+
+**Criar os usuários** (antes do primeiro acesso):
+
+```bash
+# lista.csv com uma pessoa por linha: NOME;MATRICULA;PAPEL  (PAPEL = ADMIN ou vazio)
+python usuarios_cli.py gerar lista.csv dados/usuarios.json && rm lista.csv
+python banco_cli.py enviar --usuarios dados/usuarios.json   # só na produção (Postgres)
+```
+
+**Backup da produção:** `python banco_cli.py baixar backups/AAAA-MM-DD` baixa a escala, os usuários e a auditoria nos mesmos arquivos que o modo Docker usa.
+
+## 🧪 Testes
+
+**80 testes** com pytest. A bateria inteira da API roda duas vezes: sobre arquivos e sobre um **Postgres real**. A rodada no Postgres testa também os casos que só existem na nuvem:
+- duas cópias do app gravando ao mesmo tempo sem perder dados;
+- o login feito numa cópia valendo na outra;
+- o bloqueio de tentativas de login valendo para todas as cópias.
+
+```bash
+python -m pytest -q    # modo arquivo; com ESCALA_TESTE_BANCO=postgresql://… roda também sobre o Postgres
+```
+
 ## 🛠️ Tecnologias
 
-**Backend:** Python 3.12, Flask, Gunicorn, fpdf
-**Frontend:** HTML, CSS e JavaScript puros (ES modules), PWA (manifest + service worker), previsão do tempo pela Open-Meteo
-**Desktop:** Tkinter, tkcalendar
-**Infra:** Docker, Docker Compose, Kubernetes (Kustomize, Cloudflare Tunnel ou Ingress + Let's Encrypt)
-**Qualidade:** pytest (48 testes de regras de negócio, API, perfis, auditoria e PWA)
+**Backend:** Python 3.12, Flask, psycopg 3, fpdf
+**Banco:** PostgreSQL (Neon), com JSONB e travas transacionais
+**Frontend:** HTML, CSS e JavaScript puros (ES modules), PWA (manifest + service worker), Open-Meteo
+**Infra:** Vercel (produção), Docker, Docker Compose, Kubernetes (Kustomize, Cloudflare Tunnel ou Ingress + Let's Encrypt), Gunicorn
+**Qualidade:** pytest (80 testes), com a bateria da API repetida sobre um Postgres real
+**Desktop:** Tkinter
+
+---
+
+<div align="center">
+
+Feito por **[Carlos Alves Santos Jr](https://github.com/CarlosAlvesSantosJr)** · Estudo de caso completo em **[docs/PORTFOLIO.md](docs/PORTFOLIO.md)**
+
+</div>
